@@ -97,6 +97,7 @@ umount "$b"
 
 echo "== the first boot's data partition"
 s=$(mnt state "${loop}p5" rw)
+check "the state partition's top and ssh/ open to all (sshd reads keys as the user)" '[ "$(stat -c %a "$s")" = 755 ] && [ "$(stat -c %a "$s/ssh")" = 755 ] && [ "$(stat -c %a "$s/iwd")" = 700 ]'
 check "marker says factory" '[ "$(cat "$s/data-partition")" = factory ]'
 fb=$tmp/firstboot-data
 cp "$(dirname "$0")/../rootfs/image/files/usr/lib/nibos/firstboot-data" "$fb"

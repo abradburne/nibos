@@ -73,6 +73,9 @@ put "$work/root.img" "$roota_start" "$root_size"
 # The state partition: empty but for the first boot's marker and the places provisioning writes.
 state=$(mktemp -d)
 mkdir -p "$state/ssh" "$state/iwd"
+# The partition's top (mktemp makes it 0700) and ssh/ must be open to everyone: sshd reads
+# authorized_keys as the user logging in. iwd's networks stay root's.
+chmod 755 "$state" "$state/ssh"
 chmod 700 "$state/iwd"
 echo factory > "$state/data-partition"
 st=$(mktemp)

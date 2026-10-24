@@ -147,6 +147,14 @@ fn access(state: &Path) -> io::Result<()> {
             0o644,
         )?;
     }
+    // sshd reads authorized_keys as the user logging in, so the way to it must be open to
+    // everyone (images up to db9a3c7 made the state partition's top 0700, and every key was
+    // refused).
+    for dir in [state.to_path_buf(), state.join("ssh")] {
+        if dir.is_dir() {
+            fs::set_permissions(&dir, fs::Permissions::from_mode(0o755))?;
+        }
+    }
     let keys = fs::read_to_string(state.join("ssh").join("authorized_keys"))
         .is_ok_and(|s| !s.trim().is_empty());
     let verb = if keys { "enable" } else { "disable" };
