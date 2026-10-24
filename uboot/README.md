@@ -85,7 +85,9 @@ Measured with `bench/boot.sh` and `measure.sh` ([bench/results/bootloader.md](..
   [the story](../docs/engineering/suspend-and-wifi.md)).
 - **A/B slots.** Before loading the Falcon FIT, SPL reads the boot control block at the end of
   the Falcon partition and picks slot A's or slot B's FIT, counting tries on an unconfirmed slot
-  and rolling back by itself (`rg-ds-plus/0004`; A held is checked first).
+  and rolling back by itself (`rg-ds-plus/0004`; A held is checked first). A slot on trial
+  boots with the hardware watchdog running (`rg-ds-plus/0005`), so a hang before systemd
+  uses up the try too.
   [docs/design/ab-rollback.md](../docs/design/ab-rollback.md).
 - SPL rejects a FIT configuration without a `description` before loading anything;
   `mkfalcon.py` writes one.

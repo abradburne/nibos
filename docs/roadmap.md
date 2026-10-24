@@ -16,7 +16,8 @@ A device should get fixes without a card reader, and never be left unbootable by
 - **Rollback**: A/B slots, phase 1 done ([design/ab-rollback.md](design/ab-rollback.md)): SPL
   boots the slot the boot control block says, an unconfirmed slot gets three tries and then the
   other one takes over, a slot is confirmed once its boot UI is up, and the safe mode offers to
-  go back. Next: **phase 2**, SPL arms the watchdog (hangs before systemd count as failures);
+  go back. **Phase 2**, SPL arming the watchdog for a slot on trial (hangs before systemd count
+  as failures), is built and waits for its device test;
   **phase 3**, the fallback U-Boot follows the good slot; **phase 4**, the updater that writes
   a slot (below).
 - **One-file updates**: copy a signed update file to the card's root and restart; the OS is

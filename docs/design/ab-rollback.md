@@ -116,7 +116,11 @@ doesn't reach "good":
 - a hang in userspace: the hardware watchdog restarts it 22 s after systemd stops feeding it;
 - DSlot crashing into the safe mode (above);
 - someone holding power to switch off: the next power-on is the next try;
-- a hang before systemd: nothing restarts it yet (phase 2).
+- a hang before systemd (in the kernel, mounting the root, in userspace before PID 1 takes the
+  watchdog over): SPL starts the hardware watchdog when it boots a slot on trial (U-Boot
+  `rg-ds-plus/0005`, 22.4 s), and the kernel feeds it until systemd opens it, for at most
+  60 s (`watchdog.open_timeout=60` on the command line). A good slot boots with it off.
+  Built, not yet tested on a device.
 
 ## What could need a card reader
 
@@ -152,11 +156,11 @@ an updater writes the first block.
 
 ## Not yet
 
-- **Phase 2: SPL arms the watchdog** (`dw_wdt`, a few register writes, its maximum ~22 s)
-  before handing over, so hangs before systemd count as failed tries; the kernel keeps feeding
-  it until systemd takes over (`WATCHDOG_HANDLE_BOOT_ENABLED`, already on). Still to test: a
-  userspace hang as a failed try (DSlot's unit `ExecStart=/bin/sleep infinity`, the splash
-  never taken over).
+- **Phase 2's test on a device**: SPL arms the watchdog for a slot on trial (built, above).
+  To test: a slot on trial whose init never starts systemd (`init=/usr/bin/sleep infinity`
+  in its FIT) restarting after ~22 s three times and handing back; a good slot still booting
+  with the watchdog off; a userspace hang (DSlot's unit `ExecStart=/bin/sleep infinity`, the
+  splash never taken over) as a failed try.
 - **Phase 3: the fallback follows the good slot.** Today holding A boots `/boot` on root A
   with the plain command line; U-Boot proper can read the block (`mmc read`) and pick the
   `extlinux.conf` on the good slot's root instead.

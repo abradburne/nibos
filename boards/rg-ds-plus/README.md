@@ -14,7 +14,7 @@ sensor, three LEDs, a USB-C port for charging and OTG and a second, host-only US
 | [`board.sh`](board.sh) | The board as the scripts see it: device tree, U-Boot defconfig, the card's layout, console size, RAM |
 | [`dts/rk3568-anbernic-rg-ds-plus.dts`](dts/rk3568-anbernic-rg-ds-plus.dts) | The device tree: mainline's RG DS tree plus what the DS+'s stock tree says is different |
 | [`kernel/`](kernel/) | Three panel patches ([why each](../../docs/engineering/patches.md)), the kernel config fragment, the smoke test's drivers and firmware |
-| [`uboot/`](uboot/) | Four U-Boot patches (the A-held fallback, the CPU clock while unpacking, UHS in SPL, the A/B slot choice) and the config fragments |
+| [`uboot/`](uboot/) | Five U-Boot patches (the A-held fallback, the CPU clock while unpacking, UHS in SPL, the A/B slot choice, the watchdog for a slot on trial) and the config fragments |
 | [`hw/files/`](hw/files/) | The hardware layer's board files: the daemons' device names (`usr/lib/nibos/board.conf`), udev, logind, WirePlumber, thermal limits, iwd, modules |
 | [`rootfs/files/`](rootfs/files/) | The root image's board file: the stock partitions kept out of systemd |
 | [`hw/aw88166-tuning.py`](hw/aw88166-tuning.py) | nibOS's own tuning file for the speaker amps (the DSP bypassed, conservative gain), built into `nibos-hw` |

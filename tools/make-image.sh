@@ -44,7 +44,7 @@ in_vm bash -c "FALLBACK=1 ROOT_PART=3 OUT='$work' bash '$NIBOS_ROOT/uboot/build.
 
 # The command line, as kernel/deploy.sh's (it says why each argument is there), on this
 # layout's root.
-bootargs="root=PARTLABEL=nibos-root-a rootfstype=ext4 rootwait rw firmware_class.path=/var/lib/nibos/firmware console=tty1 fbcon=font:TER16x32 systemd.tty.rows.console=$BOARD_CONSOLE_ROWS systemd.tty.columns.console=$BOARD_CONSOLE_COLUMNS SYSTEMD_DEFAULT_MOUNT_RATE_LIMIT_BURST=20 quiet loglevel=3"
+bootargs="root=PARTLABEL=nibos-root-a rootfstype=ext4 rootwait rw firmware_class.path=/var/lib/nibos/firmware console=tty1 fbcon=font:TER16x32 systemd.tty.rows.console=$BOARD_CONSOLE_ROWS systemd.tty.columns.console=$BOARD_CONSOLE_COLUMNS SYSTEMD_DEFAULT_MOUNT_RATE_LIMIT_BURST=20 watchdog.open_timeout=60 quiet loglevel=3"
 # Both editions: the splash puts the boot picture up at 1.5 s (init=), in the Falcon FIT only,
 # as kernel/deploy.sh does, so the fallback keeps the plain command line; with it, no console
 # cursor (vt.global_cursor_default=0, as kernel/deploy.sh says).

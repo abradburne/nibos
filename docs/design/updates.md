@@ -1,7 +1,8 @@
 # System updates
 
-Status: **being built.** Before updates go further than a development card, A/B phase 2 (SPL
-arms the watchdog) comes first, so a hang before systemd counts as a failed try too. How a nibOS device updates itself: a whole system slot,
+Status: **being built.** A/B phase 2 (SPL arms the watchdog for a slot on trial, so a hang
+before systemd counts as a failed try too) is built and is tested on a device before updates go
+further than a development card. How a nibOS device updates itself: a whole system slot,
 written to the slot that isn't running, tried once, confirmed or rolled back by the A/B slots
 that are already there ([ab-rollback.md](ab-rollback.md)).
 
@@ -27,7 +28,7 @@ that are already there ([ab-rollback.md](ab-rollback.md)).
 |---|---|
 | Slots | Root A `p3 nibos-root-a`, root B `p4 nibos-root-b`, 3 GiB each; FIT A at the Falcon partition's start, FIT B 32 MiB in; the boot control block at its end ([ab-rollback.md](ab-rollback.md)) |
 | Already built | SPL's slot choice and tries, `nibos-bootctl try/good/rollback/write-fit`, `nibos-boot-good`, the safe mode's "Go back to the previous version" |
-| Not yet | SPL arming the watchdog (a hang before systemd isn't a failed try yet: A/B phase 2); the A-held fallback booting the good slot's `/boot` (phase 3) |
+| Not yet | the A-held fallback booting the good slot's `/boot` (phase 3) |
 | Kept outside the slots | NIBOS-DATA (games, saves), the state partition `p5` (provisioning's results, Wi-Fi networks, SSH keys) |
 
 Updates are for image cards. A development card (no root B) keeps `kernel/deploy.sh` and the

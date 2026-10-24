@@ -27,9 +27,13 @@ target=${1:-$DEVICE}
 # (so local-fs.target and everything after it) ~0.7 s until the limit lifts.
 # rootfstype=ext4: without it the kernel tries ext3 and ext2 (which ext4 also
 # registers) on the root partition first.
+# watchdog.open_timeout: a slot on trial boots with the hardware watchdog running (SPL starts it,
+# U-Boot rg-ds-plus/0005); the kernel feeds it until systemd opens it, for at most 60 s, so a
+# hang before PID 1 takes it over restarts the device and uses up the try. Without SPL's
+# watchdog (a good slot) it changes nothing.
 # firmware_class.path: firmware nibOS chooses at run time (the speaker amps' tuning: nib audio)
 # comes from /var/lib/nibos/firmware before /usr/lib/firmware.
-bootargs="root=PARTLABEL=$BOARD_ROOT_PARTLABEL rootfstype=ext4 rootwait rw firmware_class.path=/var/lib/nibos/firmware console=tty1 fbcon=font:TER16x32 systemd.tty.rows.console=$BOARD_CONSOLE_ROWS systemd.tty.columns.console=$BOARD_CONSOLE_COLUMNS SYSTEMD_DEFAULT_MOUNT_RATE_LIMIT_BURST=20 quiet loglevel=3"
+bootargs="root=PARTLABEL=$BOARD_ROOT_PARTLABEL rootfstype=ext4 rootwait rw firmware_class.path=/var/lib/nibos/firmware console=tty1 fbcon=font:TER16x32 systemd.tty.rows.console=$BOARD_CONSOLE_ROWS systemd.tty.columns.console=$BOARD_CONSOLE_COLUMNS SYSTEMD_DEFAULT_MOUNT_RATE_LIMIT_BURST=20 watchdog.open_timeout=60 quiet loglevel=3"
 # The power-on splash (init= puts DSlot's logo up, then runs systemd) stays on or off as the device
 # has it (../rootfs/splash/boot.sh on|off): in the Falcon FIT only, so the fallback through
 # extlinux keeps the plain command line. extlinux.conf records it in a "# splash on" line.
