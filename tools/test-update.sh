@@ -67,7 +67,7 @@ echo 0 > "$P/run/nibos/charger/online"
 export NIBOS_UPDATE_TEST_ROOT=$P NIBOS_UPDATE_RUNNING=A NIBOS_UPDATE_SLOT_DEV=${loop}p4 \
     NIBOS_BOOTCTL_DEVICE=${loop}p1 NIBOS_UPDATE_NO_REBOOT=1
 st() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$P/run/nibos/update/status.json" "$1"; }
-nibos-bootctl init >/dev/null
+# A fresh image's card has no boot control block (SPL boots slot A); apply makes it.
 
 echo "== check"
 check "a newer release from a file: available" 'nibos-update check --from "$manifest" >/dev/null && [ "$(st phase)" = available ] && [ "$(st available)" = "$newer" ]'
@@ -110,7 +110,7 @@ check "slot B's root: a clean file system with the release's files" 'e2fsck -fn 
 # shellcheck disable=SC2034 # used in the checks
 fit=$(stat -c %s "$work/falcon-b.itb")
 check "slot B's FIT in the Falcon partition, 32 MiB in" 'cmp -n "$fit" "$work/falcon-b.itb" <(dd if="${loop}p1" bs=1M skip=32 status=none)'
-check "the boot control block unchanged (A, good) until applied" 'nibos-bootctl status | grep -q "active: A"'
+check "no boot control block until applied (SPL keeps booting A)" 'nibos-bootctl status | grep -q "no boot control block"'
 mkdir -p "$tmp/m"
 mount -o ro "${loop}p4" "$tmp/m"
 check "the device's identity and the user's settings carried over" 'cmp -s "$P/etc/machine-id" "$tmp/m/etc/machine-id" && cmp -s "$P/home/nibos/.config/dslot/settings.toml" "$tmp/m/home/nibos/.config/dslot/settings.toml" && cmp -s "$P/etc/ssh/ssh_host_ed25519_key" "$tmp/m/etc/ssh/ssh_host_ed25519_key"'
@@ -130,7 +130,7 @@ with open(sys.argv[1], "r+b") as f:
 PY
 rm -f "$P/var/lib/nibos/state/update/progress" "$P/var/lib/nibos/state/update/ready"
 check "a damaged chunk: refused, not ready, the failed step named" '! nibos-update download 2>/dev/null && [ "$(st phase)" = error ] && [ "$(st step)" = download ] && [ ! -e "$P/var/lib/nibos/state/update/ready" ]'
-check "nothing to apply" '! nibos-update apply 2>/dev/null && nibos-bootctl status | grep -q "active: A"'
+check "nothing to apply" '! nibos-update apply 2>/dev/null && nibos-bootctl status | grep -q "no boot control block"'
 cp "$tmp/good.slot" "$payload"
 check "the good one again: ready" 'nibos-update download >/dev/null && [ "$(st phase)" = ready ]'
 

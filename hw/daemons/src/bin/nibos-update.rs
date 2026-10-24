@@ -411,8 +411,9 @@ fn carry_over(dev: &Path) {
         if let Some(parent) = dest.parent() {
             let _ = fs::create_dir_all(parent);
         }
+        // -x: the state partition (under /var/lib/nibos) stays where it is, not copied in.
         let copied = Command::new("cp")
-            .arg("-a")
+            .arg("-ax")
             .arg(&p)
             .arg(&dest)
             .status()
@@ -445,6 +446,15 @@ fn apply() {
         fail("the written update isn't the pending one: download again");
     }
     preconditions();
+    // An image's card has no boot control block until the first update (SPL boots slot A
+    // without one): make it now, with the running slot A good.
+    let has_block = Command::new("nibos-bootctl")
+        .arg("status")
+        .output()
+        .is_ok_and(|o| !String::from_utf8_lossy(&o.stdout).contains("no boot control block"));
+    if !has_block && !bootctl(&["init"]) {
+        fail("couldn't make the boot control block");
+    }
     write(state("applied"), version).unwrap_or_else(|e| fail(e));
     let _ = write(state("previous"), &release().version);
     if !bootctl(&["try", slot]) {
