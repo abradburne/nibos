@@ -7,7 +7,7 @@ built for the board in `NIBOS_BOARD` from three levels of files:
 
 | Path | What |
 |---|---|
-| [`daemons/`](daemons/) | Rust: `nibos-input`, `nibos-audio`, `nibos-backlight` and `nibos-keys` (the console's on-screen keyboard, with getty@tty1), and the tools `nibos-charge-boot`, `nibos-bootctl` (the A/B slots) and `nibos-provision` (an image's `provision.toml`), with their logic in a tested library (`src/board.rs`, `src/gamepad.rs`, `src/controls.rs`, `src/backlight.rs`, `src/audio.rs`, `src/keys.rs`, `src/ab.rs`, `src/provision.rs`, ...) |
+| [`daemons/`](daemons/) | Rust: `nibos-input`, `nibos-audio`, `nibos-backlight` and `nibos-keys` (the console's on-screen keyboard, with getty@tty1), and the tools `nibos-charge-boot`, `nibos-bootctl` (the A/B slots), `nibos-provision` (an image's `provision.toml`) and `nibos-update` (system updates, [design](../docs/design/updates.md)), with their logic in a tested library (`src/board.rs`, `src/gamepad.rs`, `src/controls.rs`, `src/backlight.rs`, `src/audio.rs`, `src/keys.rs`, `src/ab.rs`, `src/provision.rs`, `src/update.rs`, ...) |
 | [`files/`](files/) | What every board gets: the daemons' units, the network target and its units, `nib`, `nib net` and `nib brightness`, the backlights' names, access and saved levels, zram, cpufreq, the sleep hook, the iwd and bluetooth drop-ins |
 | [`socs/<soc>/hw/files/`](../socs/rk3568/hw/files/) | The SoC's: `usr/lib/nibos/soc.conf`, how it sleeps, the drivers kept out of start-up |
 | [`boards/<board>/hw/files/`](../boards/rg-ds-plus/hw/files/) | The board's: `usr/lib/nibos/board.conf`, udev rules, logind, WirePlumber, thermal limits, iwd's settings, modules |

@@ -8,7 +8,7 @@
 #   install.sh DESTDIR BINDIR SOCFILES BOARDFILES
 #
 # BINDIR holds the built nibos-input, nibos-audio, nibos-backlight, nibos-provision,
-# nibos-charge-boot and nibos-bootctl
+# nibos-charge-boot, nibos-bootctl, nibos-keys and nibos-update
 # (daemons/, cargo build --release).
 set -eu
 [ $# -eq 4 ] || { echo "usage: install.sh DESTDIR BINDIR SOCFILES BOARDFILES" >&2; exit 2; }
@@ -27,7 +27,7 @@ for files in "$here/files" "$1" "$2"; do
 done
 chmod 755 "$dest/usr/bin/nib" "$dest/usr/lib/nibos/nib-net" "$dest/usr/lib/nibos/nib-brightness" \
     "$dest/usr/lib/nibos/nib-lid" "$dest/usr/lib/nibos/nib-battery" "$dest/usr/lib/nibos/nib-wifi" "$dest/usr/lib/nibos/nib-audio" \
-    "$dest/usr/lib/nibos/nib-bluetooth" "$dest/usr/lib/nibos/radios-restore" \
+    "$dest/usr/lib/nibos/nib-bluetooth" "$dest/usr/lib/nibos/radios-restore" "$dest/usr/lib/nibos/nib-update" \
     "$dest/usr/lib/systemd/system-sleep/nibos-unbind" "$dest/usr/lib/systemd/system-sleep/nibos-resumed" \
     "$dest/usr/lib/systemd/system-sleep/nibos-wifi-wake" "$dest/usr/lib/nibos/wifi-after-wake"
 # sudo ignores a rule file anyone but root may write.
@@ -38,4 +38,5 @@ install -Dm755 "$bin/nibos-backlight" "$dest/usr/bin/nibos-backlight"
 install -Dm755 "$bin/nibos-provision" "$dest/usr/bin/nibos-provision"
 install -Dm755 "$bin/nibos-charge-boot" "$dest/usr/bin/nibos-charge-boot"
 install -Dm755 "$bin/nibos-bootctl" "$dest/usr/bin/nibos-bootctl"
+install -Dm755 "$bin/nibos-update" "$dest/usr/bin/nibos-update"
 install -Dm755 "$bin/nibos-keys" "$dest/usr/bin/nibos-keys"

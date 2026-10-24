@@ -16,7 +16,9 @@
 //! - [`charge`]: charging asleep when the charger switched the device on (`nibos-charge-boot`);
 //! - [`audio`]: how `nibos-audio` picks sinks and reads PipeWire's tools;
 //! - [`provision`]: checking a downloadable image's `provision.toml`;
-//! - [`steps`]: the volume keys' steps, for brightness and volume alike.
+//! - [`steps`]: the volume keys' steps, for brightness and volume alike;
+//! - [`update`]: system updates: a release's manifest and signature, and writing it to the
+//!   slot that isn't running (`nibos-update`).
 //!
 //! The binaries (`src/bin/`) open the devices, run the loops and call these.
 
@@ -31,6 +33,7 @@ pub mod keys;
 pub mod power;
 pub mod provision;
 pub mod steps;
+pub mod update;
 
 /// The device `nibos-input` passes the volume keys on through (the raw
 /// device is grabbed, so the Menu + volume shortcut doesn't change the volume

@@ -1,0 +1,32 @@
+#!/bin/sh
+# nib update: system updates (nibos-update, docs/design/updates.md).
+#
+#   nib update                    what runs, and an update checked, downloading or ready
+#   nib update check [FILE|URL]   the newest release on the channel, or the one given
+#   nib update download           write it to the slot that isn't running (in the background)
+#   nib update pause              stop the download (it resumes where it was)
+#   nib update apply              restart into it
+#   nib update rollback           back to the other slot, if it is good
+#   nib update ack                forget "updated to" once seen
+#   nib update channel stable|beta
+#   nib update --allow-downgrade check ...   take an older release
+#
+# Each step is nibos-update@<step>.service (root); the wheel group may start them.
+set -eu
+run=/run/nibos/update
+step() { systemctl start --wait "nibos-update@$1.service" || true; nibos-update show; }
+if [ "${1:-}" = --allow-downgrade ]; then : > "$run/allow-downgrade"; shift; else rm -f "$run/allow-downgrade" 2>/dev/null || true; fi
+case "${1:-show}" in
+show) nibos-update show ;;
+check)
+    [ -z "${2:-}" ] || printf '%s\n' "$(case "$2" in /* | http*) echo "$2" ;; *) echo "$PWD/$2" ;; esac)" > "$run/from"
+    step check ;;
+download)
+    systemctl start --no-block nibos-update@download.service
+    echo "downloading in the background: nib update shows how far it is" ;;
+pause) systemctl stop nibos-update@download.service; nibos-update show ;;
+apply | rollback | ack) step "$1" ;;
+channel)
+    case "${2:-}" in stable | beta) step "channel-$2" ;; *) echo "usage: nib update channel stable|beta" >&2; exit 2 ;; esac ;;
+*) sed -n '4,12s/^# \{0,1\}//p' "$0" >&2; exit 2 ;;
+esac

@@ -1,0 +1,17 @@
+# nibos-hw: at every boot, before the boot UI: a new version's state migrations, and what
+# became of an applied update (nibos-update booted; again once the slot is confirmed, from
+# nibos-boot-good.service). Nothing to do on most boots: it reads a few small files.
+[Unit]
+Description=System update: state migrations and the update's outcome
+DefaultDependencies=no
+RequiresMountsFor=/var/lib/nibos/state
+After=local-fs.target
+Before=dslot.service getty@tty1.service multi-user.target shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nibos-update booted
+
+[Install]
+WantedBy=multi-user.target

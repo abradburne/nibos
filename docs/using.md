@@ -132,6 +132,15 @@ nib help                                # the commands this device has
 | `deferred` | a productivity setup | once start-up has finished, at the lowest priority |
 | `demand` | a game player | only when something starts `nibos-network.target` |
 
+## Updates
+
+On an image card, `nib update` updates the whole system from nibOS's releases: `nib update
+check`, `nib update download` (in the background; the device stays usable), then `nib update
+apply` to restart into it. The new version is written to the slot that isn't running and
+tried; if it doesn't come up, the device goes back to the old one by itself, and `nib update
+rollback` goes back by hand. Games, saves and settings stay. How it works:
+[design/updates.md](design/updates.md).
+
 ## What to do if…
 
 - **It won't start**: hold **A** while powering on; that boots the fallback whatever is wrong

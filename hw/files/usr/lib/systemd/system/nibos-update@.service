@@ -1,0 +1,16 @@
+# nibos-hw: a system update step (nibos-update %i: check, download, apply, rollback, ack,
+# channel-stable, channel-beta), started by `nib update` and DSlot (polkit lets the wheel group:
+# 50-nibos-update.rules). docs/design/updates.md.
+[Unit]
+Description=System update: %i
+RequiresMountsFor=/var/lib/nibos/state
+After=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/nibos-update %i
+# Out of the way of whatever the device is doing: a game keeps its frame time while a download
+# writes. Stopping the unit pauses a download (it resumes at the next chunk not done).
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=1

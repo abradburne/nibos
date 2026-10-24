@@ -2,7 +2,7 @@
 name = "nibos-hw"
 version = "0.1.0"
 edition = "2021"
-description = "nibOS hardware daemons: nibos-input (one gamepad), nibos-audio (headphone/speaker switching), nibos-keys (the console's on-screen keyboard)"
+description = "nibOS hardware daemons: nibos-input (one gamepad), nibos-audio (headphone/speaker switching), nibos-keys (the console's on-screen keyboard), nibos-update (system updates)"
 license = "GPL-3.0-or-later"
 
 [dependencies]
@@ -13,6 +13,13 @@ libc = "0.2"
 nibkit = { git = "https://github.com/abradburne/nibkit", tag = "v0.1.0", default-features = false, features = ["nibos", "menu-raster"] }
 # provision.toml (nibos-provision).
 toml = { version = "0.8", default-features = false, features = ["parse"] }
+# nibos-update: the release manifest (JSON), its minisign signature, the chunks' SHA-256 and
+# their zstd compression (pure Rust).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+minisign-verify = "0.3"
+sha2 = "0.11"
+ruzstd = "0.9"
 
 [profile.release]
 opt-level = "s"

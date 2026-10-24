@@ -239,6 +239,7 @@ if [ "$for_image" = 1 ]; then
     # NOTICE, licenses/), and every package with its version and licence.
     if [ -n "${DOCS:-}" ]; then
         install -Dm644 "$DOCS/NOTICE" "$root/usr/share/doc/nibos/NOTICE"
+        [ ! -f "$DOCS/release" ] || install -Dm644 "$DOCS/release" "$root/usr/lib/nibos/release"
         cp -R "$DOCS/licenses/." "$root/usr/share/licenses/"
     fi
     install -d "$root/usr/share/doc/nibos"

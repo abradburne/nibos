@@ -20,7 +20,7 @@ that are already there ([ab-rollback.md](ab-rollback.md)).
 - **Signed** with Ed25519 (minisign's format); the public key is in the image. An unsigned,
   tampered, wrong-board or wrong-edition release is refused before anything is written.
 - **One backend**, `nibos-update`, in nibos-hw: `nib update` on the command line, DSlot's
-  System → Update page, the same daemon behind both.
+  System → Update page, the same program behind both.
 
 ## What a device has to work with
 
@@ -103,10 +103,15 @@ NIBOS-DATA (`nibos/updates/`), for testing and for devices without Wi-Fi.
 
 ### The backend: `nibos-update`
 
-A root service in nibos-hw, started on demand through a socket (`/run/nibos/update.sock`, group
-`wheel`), with a small line-based JSON protocol: `status`, `check`, `download`, `pause`,
-`apply`, `rollback`, and progress events. It runs at low priority (`Nice=19`,
-`IOSchedulingClass=idle`, `CPUWeight=1`), so a game keeps its frame time while it writes.
+A root program in nibos-hw, run one step at a time as `nibos-update@<step>.service` (`check`,
+`download`, `apply`, `rollback`, `ack`, `channel-stable`, `channel-beta`), which the wheel group
+may start and stop without a password (polkit, `50-nibos-update.rules`). Each step writes
+`/run/nibos/update/status.json`: the phase (`idle`, `checking`, `available`, `downloading` with
+chunks done and the total, `paused`, `finishing`, `ready`, `restarting`, `trying`, `error`,
+`current`), the release on offer with its notes and size, and `updated_to` or `failed` after an
+update. `nib update` and DSlot start the steps and read that file. The steps run at low
+priority (`Nice=19`, `IOSchedulingClass=idle`, `CPUWeight=1`), so a game keeps its frame time
+while a download writes, and stopping `nibos-update@download` pauses it.
 
 1. **Check**: fetch the manifest and its signature for this board and edition (from
    `/usr/lib/nibos/release`, below), verify the signature, compare versions: newer, and
@@ -162,21 +167,24 @@ unnecessary.
 ### `nib update`
 
 ```
-nib update                  # status: version, edition, slots, an update in progress or ready
-nib update check            # is there a newer one? its version, size and notes
-nib update download         # write it to the inactive slot (in the background; resumable)
-nib update apply            # restart into it
-nib update rollback         # back to the other slot, if it is good
-nib update --from FILE|URL  # a release from a file or address instead of the channel
+nib update                     # what runs, and an update checked, downloading or ready
+nib update check [FILE|URL]    # the newest release on the channel, or the manifest given
+nib update download            # write it to the inactive slot (in the background; resumable)
+nib update pause               # stop the download; `download` resumes it
+nib update apply               # restart into it
+nib update rollback            # back to the other slot, if it is good
+nib update ack                 # forget "updated to" / "failed" once shown
 nib update channel stable|beta
+nib update --allow-downgrade check ...
 ```
 
 ### DSlot
 
 System → Update: Check for updates → What's new (the notes) → Download (in the background,
 with progress; the shelf stays usable) → Restart to update. After the restart, "Updated to X";
-"Go back to the previous version" beside it while the old slot is still good. DSlot talks to
-`nibos-update`'s socket; nothing in DSlot writes a partition.
+"Go back to the previous version" beside it while the old slot is still good. DSlot starts
+`nibos-update@<step>.service` and reads `/run/nibos/update/status.json`; nothing in DSlot writes
+a partition.
 
 ### What a release identifies itself by
 

@@ -33,8 +33,12 @@ fn fail(msg: impl std::fmt::Display) -> ! {
     exit(2);
 }
 
-/// The Falcon partition: on the root's disk, starting at NIBOS_FALCON_SECTOR.
+/// The Falcon partition: on the root's disk, starting at NIBOS_FALCON_SECTOR. (Or
+/// NIBOS_BOOTCTL_DEVICE, for tools/test-update.sh on a card image.)
 fn partition() -> PathBuf {
+    if let Some(dev) = std::env::var_os("NIBOS_BOOTCTL_DEVICE") {
+        return PathBuf::from(dev);
+    }
     let conf = fs::read_to_string("/usr/lib/nibos/board.conf").unwrap_or_default();
     let start: u64 = parse_env(&conf)
         .get("NIBOS_FALCON_SECTOR")

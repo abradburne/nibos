@@ -49,7 +49,14 @@ bootargs="root=PARTLABEL=nibos-root-a rootfstype=ext4 rootwait rw firmware_class
 # as kernel/deploy.sh does, so the fallback keeps the plain command line; with it, no console
 # cursor (vt.global_cursor_default=0, as kernel/deploy.sh says).
 falconargs="$bootargs init=/usr/lib/nibos/splash vt.global_cursor_default=0"
-in_vm_sh "cd kernel && gzip -dc out/Image.gz > '$work/Image' && python3 ../uboot/mkfalcon.py \"\$RKBIN/\$SOC_RKBIN_BL31\" '$work/Image' out/\$BOARD_DTB.dtb '$falconargs' '$work/falcon.itb' --memory \$BOARD_MEMORY --description 'nibOS $version for $BOARD_NAME' && rm '$work/Image'"
+# And slot B's, the same but for its root, which only an update writes
+# (tools/make-release.sh puts it in the release; docs/design/updates.md).
+falconargs_b=${falconargs/root=PARTLABEL=nibos-root-a/root=PARTLABEL=nibos-root-b}
+fit() { in_vm_sh "cd kernel && python3 ../uboot/mkfalcon.py \"\$RKBIN/\$SOC_RKBIN_BL31\" '$work/Image' out/\$BOARD_DTB.dtb '$1' '$2' --memory \$BOARD_MEMORY --description 'nibOS $version for $BOARD_NAME'"; }
+in_vm_sh "cd kernel && gzip -dc out/Image.gz > '$work/Image'"
+fit "$falconargs" "$work/falcon.itb"
+fit "$falconargs_b" "$work/falcon-b.itb"
+rm "$work/Image"
 
 # The notice and the licences no package installs: rkbin's, and the kernel's and U-Boot's.
 extra=
@@ -83,6 +90,17 @@ sed -e "s|@VERSION@|$version|" -e "s|@EDITION@|$edition|" \
     EXTRA=$extra awk '$0 == "@EXTRA_COMPONENTS@" { printf "%s", ENVIRON["EXTRA"]; next } { print }' > "$work/docs/NOTICE"
 mkdir -p "$work/docs/licenses/rkbin"
 mv "$work/docs/licenses/rkbin.txt" "$work/docs/licenses/rkbin/LICENSE"
+# What the system is, for nibos-update (/usr/lib/nibos/release): the version (the tag without
+# its "v"), the edition, and where its updates come from.
+cat > "$work/docs/release" <<EOF
+NIBOS_VERSION=${version#v}
+NIBOS_BUILD=$(git -C "$NIBOS_ROOT" rev-parse --short HEAD)
+NIBOS_BOARD=$NIBOS_BOARD
+NIBOS_EDITION=$edition
+NIBOS_IMAGE=${name#nibos-"$version"-}
+NIBOS_CHANNEL=$NIBOS_UPDATE_CHANNEL
+NIBOS_UPDATE_REPO=$NIBOS_UPDATE_REPO
+EOF
 
 # nibkit (NIBKIT_REPO at NIBKIT_TAG), for its licences and for the packages built from other
 # repositories, laid out the way their PKGBUILDs look for it (NIBKIT=, _nibkit=): nibkit with a

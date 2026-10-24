@@ -103,5 +103,10 @@ case "$SSH_KEY" in *.pub) SSH_KEY=${SSH_KEY%.pub} ;; esac
 : "${NIBKIT_REPO:=https://github.com/abradburne/nibkit}"
 : "${NIBKIT_TAG:=v0.1.0}"
 
-export NIBKIT_REPO NIBKIT_TAG NIBOS_BOARD NIBOS_USER NIBOS_UID NIBOS_HOSTNAME NIBOS_TIMEZONE DEVICE SSH_KEY SSH_PUBKEY ROMS_VOLUME \
+# System updates (docs/design/updates.md): the repository whose GitHub releases images update
+# from, and the channel they follow (stable, or beta for pre-releases too).
+: "${NIBOS_UPDATE_REPO:=abradburne/nibos}"
+: "${NIBOS_UPDATE_CHANNEL:=stable}"
+
+export NIBOS_UPDATE_REPO NIBOS_UPDATE_CHANNEL NIBKIT_REPO NIBKIT_TAG NIBOS_BOARD NIBOS_USER NIBOS_UID NIBOS_HOSTNAME NIBOS_TIMEZONE DEVICE SSH_KEY SSH_PUBKEY ROMS_VOLUME \
     BUILD_MACHINE KSRC KERNEL_COMMIT USRC UBOOT_TAG RKBIN RKBIN_COMMIT DSLOT_SRC STOCK_IMAGE STOCK_DIR

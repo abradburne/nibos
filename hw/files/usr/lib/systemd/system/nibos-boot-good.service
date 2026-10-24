@@ -10,6 +10,8 @@ After=multi-user.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/nibos-bootctl confirm-when-up
+# An update tried on this slot is done once it is confirmed (nibos-update).
+ExecStartPost=-/usr/bin/nibos-update booted
 
 [Install]
 WantedBy=multi-user.target

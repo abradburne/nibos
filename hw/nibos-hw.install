@@ -1,6 +1,6 @@
 # nibos-hw's install hooks. The units are enabled here rather than shipped as
 # symlinks, so `nib net mode` and the user can change them afterwards.
-units="nibos-input.service nibos-cpufreq.service nibos-late-modules.service nibos-zram.service nibos-backlight.service nibos-charge-boot.service nibos-boot-good.service nibos-radios-restore.service"
+units="nibos-input.service nibos-cpufreq.service nibos-late-modules.service nibos-zram.service nibos-backlight.service nibos-charge-boot.service nibos-boot-good.service nibos-radios-restore.service nibos-update-boot.service"
 
 post_install() {
     # The speakers' tuning: an official file the device has, else nibOS's (nib audio).
@@ -42,7 +42,7 @@ post_upgrade() {
     systemctl disable iwd.service >/dev/null 2>&1 || true
     systemctl daemon-reload >/dev/null 2>&1 || true
     # Units new in this version, enabled as a fresh install would.
-    systemctl enable nibos-backlight.service nibos-charge-boot.service nibos-boot-good.service nibos-radios-restore.service >/dev/null 2>&1 || true
+    systemctl enable nibos-backlight.service nibos-charge-boot.service nibos-boot-good.service nibos-radios-restore.service nibos-update-boot.service >/dev/null 2>&1 || true
     systemctl start nibos-backlight.service >/dev/null 2>&1 || true
     systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf >/dev/null 2>&1 || true
     [ -n "$(ls /var/lib/nibos/backlight 2>/dev/null)" ] || nibos-backlight save >/dev/null 2>&1 || true

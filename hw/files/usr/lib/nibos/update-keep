@@ -1,0 +1,9 @@
+# nibos-hw: what the running root keeps itself and an update copies into the new slot's root
+# before it is tried (nibos-update, docs/design/updates.md). One path per line; a trailing *
+# takes the names that start with what's before it.
+/etc/machine-id
+/etc/ssh/ssh_host_*
+/home
+/var/lib/nibos
+/var/lib/systemd/rfkill
+/var/lib/bluetooth

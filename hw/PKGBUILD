@@ -14,12 +14,13 @@ NIBOS_ROOT=$(cd "$startdir/.." && pwd)
 
 pkgname=nibos-hw
 pkgver=0.1.0
-pkgrel=43
-pkgdesc="nibOS hardware layer for the $BOARD_NAME: one gamepad, audio routing, lid and power, battery protect, LEDs, network on demand, the console's on-screen keyboard, the radios' switches"
+pkgrel=44
+pkgdesc="nibOS hardware layer for the $BOARD_NAME: one gamepad, audio routing, lid and power, battery protect, LEDs, network on demand, the console's on-screen keyboard, the radios' switches, system updates"
 arch=(aarch64)
 # nibos-keys links nibkit (MIT) and draws in its Roboto Condensed (SIL OFL 1.1).
 license=(GPL-3.0-or-later MIT OFL-1.1)
-depends=(systemd pipewire pipewire-pulse wireplumber libpulse alsa-ucm-conf rtkit wireless-regdb)
+# curl: nibos-update's downloads.
+depends=(systemd pipewire pipewire-pulse wireplumber libpulse alsa-ucm-conf rtkit wireless-regdb curl)
 makedepends=(cargo python)
 install=nibos-hw.install
 
