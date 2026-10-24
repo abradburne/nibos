@@ -469,6 +469,10 @@ fn rollback() {
     if !bootctl(&["rollback"]) {
         fail("the other slot isn't good: there is nothing to go back to");
     }
+    // After the restart the slot left behind holds this version: it is the one to go back to.
+    let _ = write(state("previous"), &release().version);
+    let _ = fs::remove_file(state("updated-to"));
+    let _ = fs::remove_file(state("failed"));
     status("restarting", "back to the previous version", &[]);
     reboot();
 }
@@ -494,6 +498,10 @@ fn booted() {
         }
     }
     let _ = write(state("last-version"), &r.version);
+    // "Updated to X" only while X is what runs (not after going back).
+    if read(state("updated-to")).is_some_and(|v| v != r.version) {
+        let _ = fs::remove_file(state("updated-to"));
+    }
     if let Some(applied) = read(state("applied")) {
         if applied == r.version {
             if !bootctl(&["unconfirmed"]) {

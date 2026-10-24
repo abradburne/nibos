@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Sat, 24 Oct 2026 20:01:42 +0900
+Subject: [PATCH] rockchip: rk3568: make the WDT and TSADC trigger a first
+ global reset
+
+The RK3568's watchdog and thermal sensor trigger a second global reset
+by default, which leaves the SoC hung instead of restarting it: an
+expired watchdog never brings the board back. On the RG DS+ a slot on
+trial whose init never started systemd stayed hung for over ten minutes
+with SPL's watchdog running, and a reboot that needed the watchdog hung
+with only a backlight on. Set both to a first global reset in SPL, as
+PX30 does.
+
+Upstream status: proposed on the U-Boot list in June 2026 ("rockchip:
+rk3568: make the WDT trigger a first global reset", and the TSADC
+patch); not merged in v2026.10. Drop this when it is.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ arch/arm/mach-rockchip/rk3568/rk3568.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm/mach-rockchip/rk3568/rk3568.c b/arch/arm/mach-rockchip/rk3568/rk3568.c
+index 0a6607e5..43c69948 100644
+--- a/arch/arm/mach-rockchip/rk3568/rk3568.c
++++ b/arch/arm/mach-rockchip/rk3568/rk3568.c
+@@ -28,6 +28,10 @@
+ 
+ #define PMU_BASE_ADDR		0xfdd90000
+ #define PMUCRU_BASE_ADDR	0xfdd00000
++#define CRU_BASE_ADDR		0xfdd20000
++#define CRU_GLB_RST_CON		(0xdc)
++#define GLB_RST_CON_TSADC_FIRST	BIT(0)
++#define GLB_RST_CON_WDT_FIRST	BIT(1)
+ #define PMUCRU_PMUGATE_CON0	(0x180)
+ #define CLK_RTC32K_FRAC_GATE	BIT(1)
+ #define PMU_NOC_AUTO_CON0	(0x70)
+@@ -157,6 +161,15 @@ int arch_cpu_init(void)
+ 	 * which s2idle and suspend use, never completes.
+ 	 */
+ 	writel(CLK_RTC32K_FRAC_GATE << 16, PMUCRU_BASE_ADDR + PMUCRU_PMUGATE_CON0);
++
++	/*
++	 * Make the watchdog and the TSADC trigger a first global reset, as
++	 * on PX30. The default, a second global reset, leaves the SoC hung
++	 * rather than restarting it: a watchdog that expires never brings
++	 * the board back, and a thermal shutdown doesn't either.
++	 */
++	setbits_le32(CRU_BASE_ADDR + CRU_GLB_RST_CON,
++		     GLB_RST_CON_WDT_FIRST | GLB_RST_CON_TSADC_FIRST);
+ #endif
+ 	return 0;
+ }
+-- 
+2.56.0
+

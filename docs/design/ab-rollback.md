@@ -120,7 +120,10 @@ doesn't reach "good":
   watchdog over): SPL starts the hardware watchdog when it boots a slot on trial (U-Boot
   `rg-ds-plus/0005`, 22.4 s), and the kernel feeds it until systemd opens it, for at most
   60 s (`watchdog.open_timeout=60` on the command line). A good slot boots with it off.
-  Built, not yet tested on a device.
+  For the watchdog to restart the board at all, SPL makes it trigger a first global reset
+  (U-Boot `rk3568/0005`): the RK3568's default, a second global reset, leaves the SoC hung.
+  Found on a device: a slot on trial whose init never started stayed hung for over ten
+  minutes with SPL's watchdog running. The test with the fix is to come.
 
 ## What could need a card reader
 

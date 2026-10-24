@@ -139,6 +139,9 @@ check "applied: slot B on trial (3 tries), the old version recorded" 'nibos-upda
 # Back on A (as after three failed tries): the update is reported as failed.
 check "back on the old version: \"failed\"" 'nibos-update booted && [ "$(st failed)" = "$newer" ] && [ ! -e "$P/var/lib/nibos/state/update/applied" ]'
 check "ack forgets it" 'nibos-update ack && [ -z "$(st failed)" ]'
+# Going back by hand (slot B confirmed good, then rollback): the version left behind is recorded.
+nibos-bootctl try B >/dev/null && nibos-bootctl good >/dev/null 2>&1
+check "rollback: back to A, the version left behind recorded" 'nibos-update rollback >/dev/null && nibos-bootctl status | grep -q "active: A" && [ "$(st previous)" = "$running" ]'
 echo "($running → $newer, $total chunks)"
 
 echo
