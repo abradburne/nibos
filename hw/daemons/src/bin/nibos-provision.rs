@@ -151,7 +151,12 @@ fn access(state: &Path) -> io::Result<()> {
         .is_ok_and(|s| !s.trim().is_empty());
     let verb = if keys { "enable" } else { "disable" };
     run("systemctl", &[verb, "--quiet", "sshd.socket"], None)?;
-    run("systemctl", &["daemon-reload"], None)
+    run("systemctl", &["daemon-reload"], None)?;
+    // Enabling only changes later boots: this boot's jobs were decided before this ran, so the
+    // socket is started (or stopped) now too, or SSH would wait for a restart after the first
+    // boot. --no-block: this unit is ordered before sshd.socket, so waiting would deadlock.
+    let now = if keys { "start" } else { "stop" };
+    run("systemctl", &[now, "--no-block", "sshd.socket"], None)
 }
 
 fn provision_file(boot: &Path, state: &Path) -> io::Result<()> {
