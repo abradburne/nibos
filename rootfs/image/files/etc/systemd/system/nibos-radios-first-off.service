@@ -1,0 +1,16 @@
+# nibos (a downloadable image): Wi-Fi and Bluetooth off on a fresh card until switched on
+# (/usr/lib/nibos/radios-first-off). Started by 73-nibos-radios-first-off.rules when a radio
+# appears: at boot in the boot network mode, the first time something starts the network in
+# the others. After provisioning, whose [wifi] means Wi-Fi is wanted, and on the state
+# partition that holds it.
+[Unit]
+Description=Keep Wi-Fi and Bluetooth off on a fresh card until they are switched on
+DefaultDependencies=no
+RequiresMountsFor=/var/lib/nibos/state
+After=nibos-provision.service systemd-rfkill.service
+Before=shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/nibos/radios-first-off

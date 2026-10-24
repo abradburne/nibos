@@ -1,0 +1,14 @@
+# nibos (rootfs/make-arch.sh): the image is small; grow the root file system
+# to fill its partition once, on the first boot.
+[Unit]
+Description=Grow the root file system to fill its partition (first boot)
+ConditionPathExists=!/var/lib/nibos/grown
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/systemd/systemd-growfs /
+ExecStart=/usr/bin/mkdir -p /var/lib/nibos
+ExecStart=/usr/bin/touch /var/lib/nibos/grown
+
+[Install]
+WantedBy=multi-user.target

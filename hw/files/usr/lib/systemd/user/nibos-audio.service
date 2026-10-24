@@ -1,0 +1,16 @@
+# nibos-hw: headphone/speaker switching, the speakers' keep-alive stream and
+# the volume keys outside a desktop (/usr/bin/nibos-audio, hw/daemons; what
+# the board has is in /usr/lib/nibos/board.conf). A user service, next to
+# PipeWire; enabled globally by the package.
+[Unit]
+Description=Headphone/speaker switching
+After=pipewire-pulse.service wireplumber.service
+Wants=pipewire-pulse.service wireplumber.service
+
+[Service]
+ExecStart=/usr/bin/nibos-audio
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

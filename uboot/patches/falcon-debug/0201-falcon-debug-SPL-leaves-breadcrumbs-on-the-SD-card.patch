@@ -1,0 +1,247 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 15:57:48 +0900
+Subject: [PATCH] falcon-debug: SPL leaves breadcrumbs on the SD card
+
+Not for use in a normal build: uboot/build.sh applies it with
+FALCON=1 FALCON_DEBUG=1.
+
+The RG DS+ has no serial console, so SPL writes what it hands TF-A (the
+FIT configuration, the images found, BL33's entry and x0) to SD sector
+24000 onward, where Linux can read it after a boot through the fallback
+U-Boot. This is how the missing FIT description and the device tree
+loadables problem in Falcon mode were found.
+---
+ arch/arm/mach-rockchip/rk3568/rk3568.c | 39 ++++++++++++++++++++++++++
+ common/spl/spl_atf.c                   |  7 +++++
+ common/spl/spl_fit.c                   | 29 +++++++++++++++++--
+ drivers/mmc/rockchip_dw_mmc.c          | 16 +++++++++--
+ 4 files changed, 87 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm/mach-rockchip/rk3568/rk3568.c b/arch/arm/mach-rockchip/rk3568/rk3568.c
+index f947e79d..02cde053 100644
+--- a/arch/arm/mach-rockchip/rk3568/rk3568.c
++++ b/arch/arm/mach-rockchip/rk3568/rk3568.c
+@@ -221,6 +221,10 @@ int checkboard(void)
+ 
+ #if IS_ENABLED(CONFIG_XPL_BUILD) && IS_ENABLED(CONFIG_TARGET_ANBERNIC_RG_DS_RK3568)
+ #include <spl.h>
++#include <blk.h>
++#include <memalign.h>
++#include <mmc.h>
++#include <time.h>
+ #include <linux/delay.h>
+ 
+ /*
+@@ -239,6 +243,30 @@ int checkboard(void)
+ #define HATCH_PIN		7	/* B7 */
+ #define HATCH_BIT		(8 + HATCH_PIN)
+ 
++/*
++ * Falcon debugging without a serial console: breadcrumbs on SD sectors
++ * 24000+n (unused, in the bootloader area), only on a Falcon boot, for Linux
++ * to read after a recovery boot.
++ */
++static struct blk_desc *falcon_desc;
++
++void falcon_crumb(int n, u32 a, u32 b, u32 c, u32 d)
++{
++	ALLOC_CACHE_ALIGN_BUFFER(u32, buf, 128);
++
++	if (!falcon_desc)
++		return;
++	memset(buf, 0, 512);
++	buf[0] = 0x434c4146;	/* "FALC" */
++	buf[1] = n;
++	buf[2] = timer_get_us();
++	buf[3] = a;
++	buf[4] = b;
++	buf[5] = c;
++	buf[6] = d;
++	blk_dwrite(falcon_desc, 24000 + n, 1, buf);
++}
++
+ static bool hatch_held(void)
+ {
+ 	/* GPIO function, pull-up, input */
+@@ -266,6 +294,17 @@ unsigned long board_spl_mmc_get_uboot_raw_sector(struct mmc *mmc,
+ 	if (hatch_held())
+ 		return FALLBACK_SECTOR;
+ 
++	/* Falcon debugging: SPL got as far as choosing the Falcon FIT */
++	if (raw_sect == 0x28000) {
++		falcon_desc = mmc_get_blk_desc(mmc);
++		extern int falcon_uhs_status;
++
++		falcon_crumb(1, raw_sect, mmc->selected_mode, mmc->clock,
++			     falcon_uhs_status);
++		falcon_crumb(6, mmc->cfg->host_caps, mmc->host_caps,
++			     mmc->card_caps, mmc->ocr);
++	}
++
+ 	return raw_sect;
+ }
+ #endif
+diff --git a/common/spl/spl_atf.c b/common/spl/spl_atf.c
+index 05bb0e65..da75fc18 100644
+--- a/common/spl/spl_atf.c
++++ b/common/spl/spl_atf.c
+@@ -275,6 +275,9 @@ ulong spl_fit_images_get_entry(void *blob, int node)
+ 	return val;
+ }
+ 
++#include <asm/io.h>
++void falcon_crumb(int n, u32 a, u32 b, u32 c, u32 d);
++
+ void __noreturn spl_invoke_atf(struct spl_image_info *spl_image)
+ {
+ 	ulong  bl32_entry = 0;
+@@ -324,6 +327,10 @@ void __noreturn spl_invoke_atf(struct spl_image_info *spl_image)
+ 	if (CONFIG_IS_ENABLED(ATF_NO_PLATFORM_PARAM))
+ 		platform_param = 0;
+ 
++	falcon_crumb(0, bl33_entry, (ulong)blob,
++		     blob ? fdt_path_offset(blob, "/fit-images") : -1,
++		     readl(0x04000038));
++
+ 	/*
+ 	 * We don't provide a BL3-2 entry yet, but this will be possible
+ 	 * using similar logic.
+diff --git a/common/spl/spl_fit.c b/common/spl/spl_fit.c
+index 6966f2d2..03698b6c 100644
+--- a/common/spl/spl_fit.c
++++ b/common/spl/spl_fit.c
+@@ -222,6 +222,9 @@ static int get_aligned_image_size(struct spl_load_info *info, ulong data_size,
+  * (for CONFIG_BOOTMETH_VBE_SIMPLE_FW), or another negative error number on
+  * other error.
+  */
++void falcon_crumb(int n, u32 a, u32 b, u32 c, u32 d);
++static int falcon_lsf;
++
+ static int load_simple_fit(struct spl_load_info *info, ulong fit_offset,
+ 			   const struct spl_fit_info *ctx, int node,
+ 			   struct spl_image_info *image_info, ulong max_size)
+@@ -372,8 +375,15 @@ static int load_simple_fit(struct spl_load_info *info, ulong fit_offset,
+ 		log_debug("reading from offset %x / %lx size %lx to %p: ",
+ 			  offset, read_offset, size, src_ptr);
+ 
+-		if (info->read(info, read_offset, size, src_ptr) < length)
+-			return -EIO;
++		falcon_crumb(20 + 2 * falcon_lsf, node, read_offset, size,
++			     (ulong)src_ptr);
++		{
++			ulong got = info->read(info, read_offset, size, src_ptr);
++
++			falcon_crumb(21 + 2 * falcon_lsf++, got, length, 0, 0);
++			if (got < length)
++				return -EIO;
++		}
+ 
+ 		debug("External data: dst=%p, offset=%x, size=%lx\n",
+ 		      src_ptr, offset, (unsigned long)length);
+@@ -886,6 +896,7 @@ int spl_load_simple_fit(struct spl_image_info *spl_image,
+ 	int firmware_node;
+ 
+ 	ret = spl_simple_fit_read(&ctx, info, offset, fit);
++	falcon_crumb(3, ret, offset, ctx.ext_data_offset, (ulong)ctx.fit);
+ 	if (ret < 0)
+ 		return ret;
+ 
+@@ -896,6 +907,7 @@ int spl_load_simple_fit(struct spl_image_info *spl_image,
+ 	ctx.fit = spl_load_simple_fit_fix_load(ctx.fit);
+ 
+ 	ret = spl_simple_fit_parse(&ctx);
++	falcon_crumb(4, ret, ctx.conf_node, ctx.images_node, 0);
+ 	if (ret < 0)
+ 		return ret;
+ 
+@@ -929,6 +941,7 @@ int spl_load_simple_fit(struct spl_image_info *spl_image,
+ 		return -1;
+ 	}
+ 
++	falcon_crumb(5, node, index, 0, 0);
+ 	/* Load the image and set up the spl_image structure */
+ 	ret = load_simple_fit(info, offset, &ctx, node, spl_image,
+ 			      CONFIG_SYS_BOOTM_LEN);
+@@ -954,6 +967,12 @@ int spl_load_simple_fit(struct spl_image_info *spl_image,
+ 			return ret;
+ 	}
+ 
++	{
++		void falcon_crumb(int n, u32 a, u32 b, u32 c, u32 d);
++
++		falcon_crumb(2, ret, spl_image->load_addr, spl_image->os,
++			     (ulong)spl_image->fdt_addr);
++	}
+ 	firmware_node = node;
+ 	/* Now check if there are more images for us to load */
+ 	for (; ; index++) {
+@@ -974,6 +993,12 @@ int spl_load_simple_fit(struct spl_image_info *spl_image,
+ 		image_info.load_addr = 0;
+ 		ret = load_simple_fit(info, offset, &ctx, node, &image_info,
+ 				      CONFIG_SYS_BOOTM_LEN);
++		{
++			void falcon_crumb(int n, u32 a, u32 b, u32 c, u32 d);
++
++			falcon_crumb(10 + index, ret, image_info.load_addr,
++				     image_info.size, (ulong)spl_image->fdt_addr);
++		}
+ 		if (ret < 0 && ret != -EBADSLT) {
+ 			printf("%s: can't load image loadables index %d (ret = %d)\n",
+ 			       __func__, index, ret);
+diff --git a/drivers/mmc/rockchip_dw_mmc.c b/drivers/mmc/rockchip_dw_mmc.c
+index 9fe876cb..534daf00 100644
+--- a/drivers/mmc/rockchip_dw_mmc.c
++++ b/drivers/mmc/rockchip_dw_mmc.c
+@@ -223,6 +223,8 @@ static const struct dm_mmc_ops rockchip_dwmmc_ops = {
+  * UHS needs 1.8 V signalling, an IO domain that follows vqmmc, and phases
+  * we can set (RK3568 only here). Anything missing leaves High Speed.
+  */
++int falcon_uhs_status = -1;
++
+ __weak bool rockchip_dwmmc_board_no_uhs(void)
+ {
+ 	return false;
+@@ -235,6 +237,9 @@ static void rockchip_dwmmc_setup_uhs(struct udevice *dev,
+ 	struct clk drv;
+ 	int uV;
+ 
++	falcon_uhs_status = 100 + CONFIG_IS_ENABLED(MMC_UHS_SUPPORT) * 10 +
++		dev_read_bool(dev, "sd-uhs-sdr104") * 1 +
++		device_is_compatible(dev, "rockchip,rk3568-dw-mshc") * 1000;
+ 	if (!CONFIG_IS_ENABLED(MMC_UHS_SUPPORT) ||
+ 	    !dev_read_bool(dev, "sd-uhs-sdr104") ||
+ 	    !device_is_compatible(dev, "rockchip,rk3568-dw-mshc") ||
+@@ -243,16 +248,22 @@ static void rockchip_dwmmc_setup_uhs(struct udevice *dev,
+ 
+ 	if (clk_get_by_name(dev, "ciu-drive", &drv) ||
+ 	    drv.id < SCLK_SDMMC0_DRV || drv.id > SCLK_EMMC_DRV ||
+-	    (drv.id - SCLK_SDMMC0_DRV) % 2)
++	    (drv.id - SCLK_SDMMC0_DRV) % 2) {
++		falcon_uhs_status = 2;
+ 		return;
++	}
+ 	/* CRU SDMMC0_CON0 at 0x580, then SDMMC1, SDMMC2, EMMC */
+ 	priv->phase_reg = dev_read_addr_ptr(drv.dev) + 0x580 +
+ 			  (drv.id - SCLK_SDMMC0_DRV) * 4;
+ 	priv->sample_phase = -1;
+ 
+-	if (device_get_supply_regulator(dev, "vqmmc-supply", &priv->vqmmc))
++	if (device_get_supply_regulator(dev, "vqmmc-supply", &priv->vqmmc)) {
++		falcon_uhs_status = 3;
+ 		return;
++	}
+ 	uV = regulator_get_value(priv->vqmmc);
++	falcon_uhs_status = 4000000 + uV / 1000 * 10 +
++		!!rockchip_iodomain_set_voltage(priv->vqmmc, uV);
+ 	if (uV <= 0 || rockchip_iodomain_set_voltage(priv->vqmmc, uV)) {
+ 		priv->vqmmc = NULL;
+ 		return;
+@@ -263,6 +274,7 @@ static void rockchip_dwmmc_setup_uhs(struct udevice *dev,
+ 
+ 	cfg->host_caps |= MMC_CAP(UHS_SDR104) | MMC_CAP(UHS_SDR25) |
+ 			  MMC_CAP(UHS_SDR12);
++	falcon_uhs_status = 1;
+ }
+ 
+ static uint rockchip_dwmmc_get_mmc_clk(struct dwmci_host *host, uint freq)

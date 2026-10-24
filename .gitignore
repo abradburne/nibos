@@ -1,0 +1,19 @@
+# Build outputs: every build writes to an out/ next to what makes it.
+out/
+*.log
+__pycache__/
+# makepkg's and cargo's working directories, when run in place
+hw/src/
+hw/pkg/
+target/
+
+# This machine's settings (config.sh explains them; config.local.sh.example is the template)
+config.local.sh
+
+# Files extracted from a board's stock firmware (boards/<board>/extract-stock.sh):
+# not ours to redistribute.
+boards/*/stock/
+
+# macOS
+.DS_Store
+._*

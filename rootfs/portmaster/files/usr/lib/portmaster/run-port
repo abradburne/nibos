@@ -1,0 +1,71 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# run-port: starts one PortMaster port on nibOS, the way DSlot starts a game.
+#
+#   run-port /mnt/ds/Roms/PORTS/<Port>.sh
+#
+# A port is a bash script that starts the game (and gptokeyb) as children, so SIGTERM to the
+# script alone leaves the game running: bash waits for the game before it acts on a signal.
+# The port runs in a process group of its own, and SIGTERM here (DSlot's power menu, shutdown)
+# goes to the whole group, then SIGKILL after a grace period. Ports draw on the top panel;
+# DSlot leaves a controls picture on the bottom one.
+set -u
+
+script="$(realpath -e "${1:?usage: run-port <port>.sh}")" || exit 1
+shift
+
+# shellcheck source=env.sh
+source /usr/lib/portmaster/env.sh
+## A port on a card from before (a new image, another device): PortMaster first. (Updates are
+## offered in PortMaster's own entry, not before every port.)
+[ -n "$(portmaster_installed)" ] || portmaster_get_run || exit 1
+portmaster_sync || exit 1
+export NIBOS_PORT_SCRIPT="$script"
+
+## How long the port has to quit after SIGTERM before it is killed. DSlot gives its child
+## 10 s in all; leave it time to see this script go.
+GRACE=7
+
+port=""
+stop_port() {
+  [ -n "$port" ] || return 0
+  kill -TERM -- "-$port" 2>/dev/null || return 0
+  for _ in $(seq $((GRACE * 10))); do
+    kill -0 -- "-$port" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  echo "run-port: $(basename "$script") did not quit in ${GRACE} s; killed" >&2
+  kill -KILL -- "-$port" 2>/dev/null
+}
+
+## Runtimes the port mounted (bin/mount) and left mounted.
+# shellcheck disable=SC2329 # called from the traps
+unmount_runtimes() {
+  local list="${XDG_RUNTIME_DIR:-/tmp}/portmaster-mounts" target
+  [ -f "$list" ] || return 0
+  while read -r _ target; do
+    mountpoint -q "$target" && fusermount3 -u "$target"
+  done < "$list"
+  rm -f "$list"
+}
+
+# shellcheck disable=SC2329 # called from the traps
+finish() {
+  stop_port
+  unmount_runtimes
+}
+trap 'finish; exit 0' TERM INT HUP
+trap finish EXIT
+
+cd "$(dirname "$script")" || exit 1
+
+## setsid: a session and process group of its own, led by the port's bash.
+setsid bash "$script" "$@" < /dev/null &
+port=$!
+wait "$port"
+status=$?
+
+## The game may have left gptokeyb or a helper behind.
+stop_port
+port=""
+exit "$status"

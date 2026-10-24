@@ -1,0 +1,8 @@
+#!/bin/sh
+# nibos-hw: leave the time the device woke in /run/nibos/resumed, so nibos-input can ignore the
+# power key press that woke it (it would otherwise sleep again at once).
+#
+# Called by systemd-sleep with $1 = pre|post. Always exits 0: a failing hook must not stop the
+# device from sleeping or waking.
+[ "$1" = post ] && mkdir -p /run/nibos && : > /run/nibos/resumed
+exit 0

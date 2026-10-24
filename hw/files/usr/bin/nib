@@ -1,0 +1,25 @@
+#!/bin/sh
+# nib: nibOS's command on the device. Each subcommand is a program of its own,
+# /usr/lib/nibos/nib-<command>, installed by the part of nibOS it belongs to:
+#
+#   nib net up|down|status|mode boot|deferred|demand    the network (nibos-hw)
+#   nib wifi on|off|status                              the Wi-Fi radio alone (nibos-hw)
+#   nib boot-ui on|off|status                           DSlot at power-on (rootfs/dslot)
+#   nib help                                            the commands installed here
+set -eu
+lib=/usr/lib/nibos
+cmd=${1:-help}
+case "$cmd" in
+help | -h | --help)
+    echo "usage: nib COMMAND [ARGS...]"
+    for f in "$lib"/nib-*; do
+        [ -x "$f" ] || continue
+        # The line after the shebang says what the command does.
+        printf '  %-10s %s\n' "${f##*/nib-}" "$(sed -n '2s/^# nib [^:]*: //p' "$f")"
+    done
+    exit 0
+    ;;
+esac
+shift
+[ -x "$lib/nib-$cmd" ] || { echo "nib: no command '$cmd' (nib help)" >&2; exit 2; }
+exec "$lib/nib-$cmd" "$@"

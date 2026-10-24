@@ -1,0 +1,402 @@
+From 6ee062118edbe55d845bf33dfbe150cd647f64b4 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Wed, 21 Oct 2026 16:10:00 +0900
+Subject: [PATCH] nibOS: a platform profile for nibOS on the Anbernic RG DS+
+
+PortMaster lives in the user's data folder (~/.local/share/PortMaster) and the
+ports in Roms/PORTS on the games card (/mnt/ds) or the ROMS partition. Ports run
+as the user (no sudo, no bind mounts), on the top screen (SDL display priority
+DSI-2), with the one gamepad nibos-input makes.
+
+- device_info.txt and hardware.py: nibOS by /usr/lib/nibos/board.conf.
+- config.detect_paths(): nibOS's directories (tests).
+- platform/nibos.py: nibos/control.txt replaces control.txt after updates.
+- nibos/: control.txt, launch_hooks.txt, PortMaster.txt, gamecontrollerdb.txt.
+- mod_nibOS.txt.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ PortMaster/device_info.txt                    |  4 +-
+ PortMaster/libgl_nibOS.txt                    | 19 ++++
+ PortMaster/mod_nibOS.txt                      | 27 +++++
+ PortMaster/nibos/PortMaster.txt               | 12 +++
+ PortMaster/nibos/control.txt                  | 98 +++++++++++++++++++
+ PortMaster/nibos/gamecontrollerdb.txt         |  2 +
+ PortMaster/nibos/launch_hooks.txt             | 45 +++++++++
+ PortMaster/pylibs/harbourmaster/config.py     |  8 ++
+ PortMaster/pylibs/harbourmaster/hardware.py   |  4 +-
+ .../pylibs/harbourmaster/platform/__init__.py |  4 +
+ .../pylibs/harbourmaster/platform/nibos.py    | 22 +++++
+ tests/test_config.py                          | 14 +++
+ 12 files changed, 257 insertions(+), 2 deletions(-)
+ create mode 100644 PortMaster/libgl_nibOS.txt
+ create mode 100644 PortMaster/mod_nibOS.txt
+ create mode 100644 PortMaster/nibos/PortMaster.txt
+ create mode 100644 PortMaster/nibos/control.txt
+ create mode 100644 PortMaster/nibos/gamecontrollerdb.txt
+ create mode 100644 PortMaster/nibos/launch_hooks.txt
+ create mode 100644 PortMaster/pylibs/harbourmaster/platform/nibos.py
+
+diff --git a/PortMaster/device_info.txt b/PortMaster/device_info.txt
+index 0d310b9..68e128b 100755
+--- a/PortMaster/device_info.txt
++++ b/PortMaster/device_info.txt
+@@ -53,7 +53,9 @@ export CFW_NAME="Unknown"
+ export DEVICE_NAME="Unknown"
+ PLY_VERSION=""
+ 
+-if [ -f "/app/bin/retrodeck" ] || [ -f "/app/bin/retrodeck.sh" ] || [ "$FLATPAK_ID" = "net.retrodeck.retrodeck" ]; then
++if [ -f "/usr/lib/nibos/board.conf" ]; then
++    export CFW_NAME="nibOS"
++elif [ -f "/app/bin/retrodeck" ] || [ -f "/app/bin/retrodeck.sh" ] || [ "$FLATPAK_ID" = "net.retrodeck.retrodeck" ]; then
+     export CFW_NAME="RetroDECK"
+ elif [ -f "/etc/rocknix-release" ] || [ -f "/storage/.config/rocknix" ] || grep -qi 'rocknix' /etc/os-release /usr/lib/os-release 2>/dev/null; then
+     export CFW_NAME="ROCKNIX"
+diff --git a/PortMaster/libgl_nibOS.txt b/PortMaster/libgl_nibOS.txt
+new file mode 100644
+index 0000000..a4e7f4a
+--- /dev/null
++++ b/PortMaster/libgl_nibOS.txt
+@@ -0,0 +1,19 @@
++#!/bin/bash
++# shellcheck disable=SC2034 # sourced by PortMaster's ports, which use and set these
++#
++# SPDX-License-Identifier: MIT
++#
++# NOTE: This script uses $PWD to setup the libs directory!
++# Before calling this, ensure you are on the port root directory, e.g.:
++# > gamedir="/$directory/ports/stardewvalley"
++# > cd "$gamedir/"
++
++## nibOS's Mesa (Panfrost) has desktop OpenGL through EGL, which SDL's KMSDRM window uses:
++## ports use it directly, without gl4es, as on the firmwares with a desktop GL.
++
++# This sets up the standard libs directory.
++if [ -d "$PWD/libs.$DEVICE_ARCH" ]; then
++  export LD_LIBRARY_PATH="$PWD/libs.$DEVICE_ARCH:$LD_LIBRARY_PATH"
++elif [ -d "$PWD/libs" ]; then
++  export LD_LIBRARY_PATH="$PWD/libs:$LD_LIBRARY_PATH"
++fi
+diff --git a/PortMaster/mod_nibOS.txt b/PortMaster/mod_nibOS.txt
+new file mode 100644
+index 0000000..d0f5536
+--- /dev/null
++++ b/PortMaster/mod_nibOS.txt
+@@ -0,0 +1,27 @@
++#!/bin/bash
++# shellcheck disable=SC2034 # sourced by PortMaster and its ports, which use and set these
++#
++# SPDX-License-Identifier: MIT
++#
++
++## Modular - nibOS
++#
++# A modular file that is sourced for specific script lines required by ports running on nibOS.
++#
++# usage `[ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"`
++
++## nibOS has no 32-bit (armhf) libraries: ports that need them aren't offered.
++
++# Use for Godot 2
++GODOT2_OPTS="-r ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT} -f"
++
++# Use for Godot 3+
++GODOT_OPTS="--resolution ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT} -f"
++
++pm_platform_helper() {
++    pm_message_close
++
++    if [ -e "$PM_PIPE" ]; then
++        PortMasterDialogExit
++    fi
++}
+diff --git a/PortMaster/nibos/PortMaster.txt b/PortMaster/nibos/PortMaster.txt
+new file mode 100644
+index 0000000..130f645
+--- /dev/null
++++ b/PortMaster/nibos/PortMaster.txt
+@@ -0,0 +1,12 @@
++#!/bin/bash
++# shellcheck disable=SC1091 # sourced by PortMaster and its ports, which use and set these
++#
++# SPDX-License-Identifier: MIT
++#
++# Launches PortMaster: everything else lives in $controlfolder/utils/pm_launch.txt
++# and nibos/launch_hooks.txt.
++
++export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
++controlfolder="$XDG_DATA_HOME/PortMaster"
++
++source "$controlfolder/utils/pm_launch.txt" nibos; exit $?
+diff --git a/PortMaster/nibos/control.txt b/PortMaster/nibos/control.txt
+new file mode 100644
+index 0000000..b9ba487
+--- /dev/null
++++ b/PortMaster/nibos/control.txt
+@@ -0,0 +1,98 @@
++#!/bin/bash
++# shellcheck disable=SC2034,SC1091 # sourced by PortMaster and its ports, which use and set these
++#
++# SPDX-License-Identifier: MIT
++#
++# PortMaster's control.txt for nibOS: every port sources it (through the copy nibOS puts in
++# $controlfolder) before it starts. It says where PortMaster and the port are, runs the port
++# as the user (no sudo), on the top screen, and gives SDL the device's gamepad.
++
++## Ports print to the console only on firmwares that show one; nibOS doesn't.
++CUR_TTY=/dev/null
++
++export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
++export controlfolder="${controlfolder:-$XDG_DATA_HOME/PortMaster}"
++
++## A port finds its folder as /$directory/ports/<folder>: Roms/PORTS on the card it is on
++## (FAT and exFAT ignore case, so .../ports is .../PORTS). The script's own path says which
++## card; run-port names the script, $0 is it when a port is started by hand.
++nibos_port_card() {
++  case "$(realpath -m "$1" 2>/dev/null)" in
++    /mnt/ds/Roms/*)   echo "mnt/ds/Roms" ;;
++    /mnt/roms/Roms/*) echo "mnt/roms/Roms" ;;
++    *)                return 1 ;;
++  esac
++}
++
++if ! directory="$(nibos_port_card "${NIBOS_PORT_SCRIPT:-$0}")"; then
++  if [ -n "$NIBOS_PORTS_DIR" ]; then
++    directory="$(dirname "${NIBOS_PORTS_DIR#/}")"
++  elif [ -d /mnt/ds/Roms ]; then
++    directory="mnt/ds/Roms"
++  else
++    directory="mnt/roms/Roms"
++  fi
++fi
++export directory
++
++## Everything runs as the user: no sudo, no bind mounts (symbolic links instead), and
++## gptokeyb kills the game with the user's own pkill.
++export ESUDO=""
++export ESUDOKILL="-1"
++export ESUDOKILL2="-1"
++export PM_CAN_MOUNT="N"
++
++## The screens: SDL display 0 is the bottom (touch) panel on the RG DS+, so put the top panel
++## first; a port opens one window on display 0. SDL3's KMSDRM driver sorts its displays by
++## this hint (connector names), and sdl2-compat passes it through to SDL2 programs.
++if [ -f /usr/lib/nibos/board.conf ]; then
++  NIBOS_BOARD="$(. /usr/lib/nibos/board.conf; echo "$NIBOS_BOARD")"
++fi
++case "$NIBOS_BOARD" in
++  rg-ds-plus) export SDL_VIDEO_DISPLAY_PRIORITY="${SDL_VIDEO_DISPLAY_PRIORITY:-DSI-2}" ;;
++esac
++export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
++## SDL3's atomic KMS path has no plane for the second panel (AGENTS.md, "Graphics").
++export SDL_KMSDRM_ATOMIC="${SDL_KMSDRM_ATOMIC:-0}"
++
++## Libraries PortMaster's own builds were linked against under older names: LÖVE (the splash
++## and LÖVE ports) wants libtheoradec.so.1, which Arch now ships as .so.2 (the same functions).
++## Last on the path, so a port's own copy wins.
++export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}/usr/lib/portmaster/compat"
++
++## The device's one gamepad ("Anbernic RG DS+ Gamepad", from nibos-input). Only its own line:
++## all of gamecontrollerdb.txt (460 KB) is too long for SDL_GAMECONTROLLERCONFIG, which the
++## ports export (the kernel limits one variable to 128 KB).
++export SDL_GAMECONTROLLERCONFIG_FILE="$controlfolder/nibos/gamecontrollerdb.txt"
++SDLDBFILE="$SDL_GAMECONTROLLERCONFIG_FILE"
++SDLDBUSERFILE="${HOME}/.config/SDL-GameControllerDB/gamecontrollerdb.txt"
++[ ! -f "${SDLDBUSERFILE}" ] && SDLDBUSERFILE="$SDL_GAMECONTROLLERCONFIG_FILE"
++
++get_controls() {
++  ANALOGSTICKS="${ANALOG_STICKS:-1}"
++  LOWRES="N"
++  DEVICE="$(cut -d, -f1 "$SDL_GAMECONTROLLERCONFIG_FILE" | head -n1)"
++  param_device="rg-ds-plus"
++
++  ## A line of the user's own for the gamepad wins.
++  if [ "$SDLDBUSERFILE" != "$SDL_GAMECONTROLLERCONFIG_FILE" ] && grep -q "^$DEVICE," "$SDLDBUSERFILE" 2>/dev/null; then
++    export SDL_GAMECONTROLLERCONFIG_FILE="$SDLDBUSERFILE"
++    sdl_controllerconfig="$(grep "^$DEVICE," "$SDLDBUSERFILE")"
++  else
++    sdl_controllerconfig="$(< "$SDL_GAMECONTROLLERCONFIG_FILE")"
++  fi
++}
++
++source "$controlfolder/device_info.txt"
++
++## device_info.txt names the firmware from /etc/os-release ("Arch Linux ARM") unless it knows
++## nibOS (PortMaster's own nibOS profile); mod_nibOS.txt is chosen by this name.
++export CFW_NAME="nibOS"
++
++source "$controlfolder/funcs.txt"
++
++## gptokeyb runs pkill/pgrep through sh to end the game; ports export LD_LIBRARY_PATH with
++## their own libraries (an old libreadline breaks the system's bash). sudo clears it on other
++## firmwares; here gptokeyb runs as the user, so clear it.
++export GPTOKEYB2="env -u LD_LIBRARY_PATH LD_PRELOAD=$controlfolder/libinterpose.${DEVICE_ARCH}.so $controlfolder/gptokeyb2 $ESUDOKILL2"
++export GPTOKEYB="env -u LD_LIBRARY_PATH $controlfolder/gptokeyb $ESUDOKILL"
+diff --git a/PortMaster/nibos/gamecontrollerdb.txt b/PortMaster/nibos/gamecontrollerdb.txt
+new file mode 100644
+index 0000000..4dd1f44
+--- /dev/null
++++ b/PortMaster/nibos/gamecontrollerdb.txt
+@@ -0,0 +1,2 @@
++0600cf93091200000100000000010000,Anbernic RG DS+ Gamepad,a:b0,b:b1,x:b2,y:b3,back:b8,guide:b10,start:b9,leftstick:b11,rightstick:b12,leftshoulder:b4,rightshoulder:b5,dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,leftx:a0,lefty:a1,lefttrigger:b6,righttrigger:b7,platform:Linux,
++06000000091200000100000000010000,Anbernic RG DS+ Gamepad,a:b0,b:b1,x:b2,y:b3,back:b8,guide:b10,start:b9,leftstick:b11,rightstick:b12,leftshoulder:b4,rightshoulder:b5,dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,leftx:a0,lefty:a1,lefttrigger:b6,righttrigger:b7,platform:Linux,
+diff --git a/PortMaster/nibos/launch_hooks.txt b/PortMaster/nibos/launch_hooks.txt
+new file mode 100644
+index 0000000..2667bd3
+--- /dev/null
++++ b/PortMaster/nibos/launch_hooks.txt
+@@ -0,0 +1,45 @@
++#!/bin/bash
++# shellcheck disable=SC2154 # sourced by PortMaster and its ports, which use and set these
++#
++# SPDX-License-Identifier: MIT
++#
++# nibOS's launch hooks for utils/pm_launch.txt: no console to draw on, nothing run as root,
++# and DSlot reads the ports folder itself when PortMaster exits.
++
++## Autoinstall from PortMaster's own folder, and from Roms/PORTS/autoinstall only when the
++## user made one (pm_launch.txt would make it on the card otherwise).
++pm_hook_autoinstall_dirs() {
++  echo "$controlfolder/autoinstall"
++  [ -d "/$directory/ports/autoinstall" ] && echo "/$directory/ports/autoinstall"
++}
++
++## PortMaster's own app names its buttons A, B, X, Y as SDL does, by position (A the bottom
++## one), and its bar shows them so: on the DS+ the buttons are printed the other way round (A
++## right, B bottom). Give the app a mapping by the printed letters, so "A Accept" is the
++## button printed A, as in DSlot. Ports keep SDL's positions (control.txt).
++pm_hook_gui_env() {
++  export PYSDL2_DLL_PATH="/usr/lib"
++  local gui_db="$controlfolder/nibos/gamecontrollerdb-gui.txt"
++  sed -e 's/,a:b0,b:b1,x:b2,y:b3,/,a:b1,b:b0,x:b3,y:b2,/' "$SDL_GAMECONTROLLERCONFIG_FILE" > "$gui_db"
++  export SDL_GAMECONTROLLERCONFIG_FILE="$gui_db"
++  SDL_GAMECONTROLLERCONFIG="$(< "$gui_db")"
++  export SDL_GAMECONTROLLERCONFIG
++}
++
++## PortMaster's splash (LÖVE) would own the screens (DRM master) when pugwash opens them, and
++## a program that isn't root gets the screens only by opening them while no one has them: stop
++## the splash first (pmsplash.txt, sourced just before this, defines kill_splash).
++pm_hook_pre_launch() {
++  echo "Starting PortMaster."
++  kill_splash
++  wait "$PMSPLASH_PID" 2>/dev/null
++}
++
++pm_hook_post_launch() {
++  :
++}
++
++## pugwash leaves a marker for EmulationStation and friends; DSlot rescans by itself.
++pm_hook_frontend_refresh() {
++  rm -f "$controlfolder"/.*-refresh
++}
+diff --git a/PortMaster/pylibs/harbourmaster/config.py b/PortMaster/pylibs/harbourmaster/config.py
+index eac4116..d6f29cf 100755
+--- a/PortMaster/pylibs/harbourmaster/config.py
++++ b/PortMaster/pylibs/harbourmaster/config.py
+@@ -73,6 +73,14 @@ def detect_paths(root="/", cwd=None, environ=None, home=None, df_output=None):
+         scripts_dir = (cwd / 'ports').absolute()
+         testing = True
+ 
++    elif _p("/usr/lib/nibos/board.conf").is_file():
++        ## nibOS: PortMaster in the user's data folder, the ports in Roms/PORTS on the games
++        ## card (/mnt/ds) when it is in, else on the ROMS partition.
++        ports_root  = Path("/mnt/ds/Roms") if _p("/mnt/ds/Roms").is_dir() else Path("/mnt/roms/Roms")
++        tools_dir   = Path(environ['XDG_DATA_HOME'])
++        ports_dir   = ports_root / "PORTS"
++        scripts_dir = ports_root / "PORTS"
++
+     elif _p("/mnt/SDCARD/spruce").is_dir():
+         ## spruceOS (Miyoo Flip, TrimUI, Anbernic, Powkiddy RGB30...)
+         tools_dir   = Path("/mnt/SDCARD/Persistent/portmaster")
+diff --git a/PortMaster/pylibs/harbourmaster/hardware.py b/PortMaster/pylibs/harbourmaster/hardware.py
+index 49900a3..b2ee10b 100644
+--- a/PortMaster/pylibs/harbourmaster/hardware.py
++++ b/PortMaster/pylibs/harbourmaster/hardware.py
+@@ -103,7 +103,9 @@ class HardwareDetector:
+         dev_name = "unknown"
+ 
+         # 1. Host CFW Resolution
+-        if Path("/app/bin/retrodeck").is_file() or os.environ.get("FLATPAK_ID") == "net.retrodeck.retrodeck":
++        if Path("/usr/lib/nibos/board.conf").is_file():
++            cfw_name = "nibos"
++        elif Path("/app/bin/retrodeck").is_file() or os.environ.get("FLATPAK_ID") == "net.retrodeck.retrodeck":
+             cfw_name = "retrodeck"
+         elif Path("/etc/rocknix-release").is_file() or Path("/storage/.config/rocknix").is_file():
+             cfw_name = "rocknix"
+diff --git a/PortMaster/pylibs/harbourmaster/platform/__init__.py b/PortMaster/pylibs/harbourmaster/platform/__init__.py
+index 5558fe9..d9ad9e4 100644
+--- a/PortMaster/pylibs/harbourmaster/platform/__init__.py
++++ b/PortMaster/pylibs/harbourmaster/platform/__init__.py
+@@ -36,6 +36,9 @@ from .trimui import (
+     PORT_CONFIG_JSON,
+     PlatformTrimUI,
+     )
++from .nibos import (
++    PlatformNibOS,
++    )
+ from .miyoo import (
+     PlatformMiyoo,
+     PlatformSpruce,
+@@ -61,6 +64,7 @@ HM_PLATFORMS = {
+     'trimui':    PlatformTrimUI,
+     'spruce':    PlatformSpruce,
+     'retrodeck': PlatformRetroDECK,
++    'nibos':     PlatformNibOS,
+     'darwin':    PlatformTesting,
+     'default':   PlatformBase,
+     # 'default': PlatformAmberELEC,
+diff --git a/PortMaster/pylibs/harbourmaster/platform/nibos.py b/PortMaster/pylibs/harbourmaster/platform/nibos.py
+new file mode 100644
+index 0000000..b4d78c2
+--- /dev/null
++++ b/PortMaster/pylibs/harbourmaster/platform/nibos.py
+@@ -0,0 +1,22 @@
++# SPDX-License-Identifier: MIT
++#
++# nibOS (the Anbernic RG DS+ and friends). PortMaster lives in the user's data folder and
++# everything runs as the user; nibOS's own control.txt (nibos/control.txt) replaces the
++# generic one after every update, as JELOS's and ROCKNIX's do.
++
++import shutil
++
++from .base import PlatformBase
++
++
++class PlatformNibOS(PlatformBase):
++    def first_run(self):
++        self.portmaster_install([])
++
++    def portmaster_install(self, bash_files):
++        """
++        Put nibOS's control.txt in place.
++        """
++        PM_DIR = self.hm.tools_dir / "PortMaster"
++
++        shutil.copy(PM_DIR / "nibos" / "control.txt", PM_DIR / "control.txt")
+diff --git a/tests/test_config.py b/tests/test_config.py
+index 5daaef4..55b5665 100644
+--- a/tests/test_config.py
++++ b/tests/test_config.py
+@@ -174,3 +174,17 @@ def test_detect_retrodeck_json_portmaster_path(tmp_path):
+         {"paths": {"rd_home_path": "/home/deck/retrodeck", "portmaster_path": "/media/pm"}}))
+ 
+     assert detect(tmp_path)[1] == Path("/media/pm/ports")
++
++
++def test_detect_nibos_games_card(tmp_path):
++    make_dirs(tmp_path, "/usr/lib/nibos", "/mnt/ds/Roms", "/mnt/roms/Roms")
++    (tmp_path / "usr/lib/nibos/board.conf").write_text("NIBOS_BOARD=rg-ds-plus\n")
++    assert detect(tmp_path)[:3] == (
++        Path("/home/user/.local/share"), Path("/mnt/ds/Roms/PORTS"), Path("/mnt/ds/Roms/PORTS"))
++
++
++def test_detect_nibos_roms_partition(tmp_path):
++    make_dirs(tmp_path, "/usr/lib/nibos", "/mnt/roms/Roms")
++    (tmp_path / "usr/lib/nibos/board.conf").write_text("NIBOS_BOARD=rg-ds-plus\n")
++    assert detect(tmp_path)[:3] == (
++        Path("/home/user/.local/share"), Path("/mnt/roms/Roms/PORTS"), Path("/mnt/roms/Roms/PORTS"))
+-- 
+2.54.0 (Apple Git-157)
+

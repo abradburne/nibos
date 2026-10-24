@@ -1,0 +1,14 @@
+#!/bin/sh
+# nibos-hw: at boot, bring the network up if the user left Wi-Fi or Bluetooth on
+# (nibos-radios-restore.service). Their switches (nib wifi, nib bluetooth, DSlot's) are rfkill
+# blocks, which systemd-rfkill keeps in /var/lib/systemd/rfkill/ and puts back once the
+# drivers are loaded; but in the demand and deferred modes nothing loads them at boot, so a
+# radio switched on would come back off. A saved "0" (unblocked) is a radio left on.
+on=
+for f in /var/lib/systemd/rfkill/*:wlan /var/lib/systemd/rfkill/*:bluetooth; do
+    [ "$(cat "$f" 2>/dev/null)" = 0 ] && on=1
+done
+[ -n "$on" ] || exit 0
+# Off the boot path: once start-up has finished, as the deferred mode does.
+while [ "$(systemctl is-system-running)" = starting ]; do sleep 0.2; done
+exec systemctl start nibos-network.target

@@ -1,0 +1,4 @@
+# The RG DS+'s cores: Cortex-A55 (tuning and the extensions it has: LSE atomics, fp16,
+# dot product, RCpc). Builds run natively in the build machine (aarch64).
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=cortex-a55"]

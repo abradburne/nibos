@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Sat, 17 Oct 2026 17:06:45 +0900
+Subject: [PATCH 4/4] clk: rockchip: rk3568: keep clk_rtc32k_frac running
+
+clk_rtc_32k, the PMU's low-power clock, runs from clk_rtc32k_frac (24 MHz
+divided to 32.768 kHz) on the RG DS+. With that gate closed, TF-A's core
+and cluster power-down, which s2idle and suspend use, never completes:
+every suspend hangs on the way into sleep. It was found by diffing the
+PMU, CRU and GRF state of a boot through U-Boot proper (whose clock
+driver opens the gate) against a Falcon boot (SPL straight to TF-A and
+Linux, gate closed): PMUCRU PMUGATE_CON0 bit 1. Opening it by hand on a
+Falcon boot gave 10 of 10 RTC-woken suspend cycles.
+
+The bootloader now opens the gate in SPL too; mark the clock critical so
+Linux never closes it either, whatever booted it.
+
+Upstream status: candidate, for discussion: RK3568 boards whose PMU clock
+comes from the RK817's 32 kHz output instead don't need it, so a DT-based
+protected-clocks entry may be the better fix.
+---
+ drivers/clk/rockchip/clk-rk3568.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/clk/rockchip/clk-rk3568.c b/drivers/clk/rockchip/clk-rk3568.c
+index d571c4b0c..7cf9575bd 100644
+--- a/drivers/clk/rockchip/clk-rk3568.c
++++ b/drivers/clk/rockchip/clk-rk3568.c
+@@ -1496,7 +1496,7 @@ static struct rockchip_clk_branch rk3568_clk_pmu_branches[] __initdata = {
+ 	GATE(PCLK_UART0, "pclk_uart0", "pclk_pdpmu", 0,
+ 			RK3568_PMU_CLKGATE_CON(1), 2, GFLAGS),
+ 
+-	COMPOSITE_FRACMUX(CLK_RTC32K_FRAC, "clk_rtc32k_frac", "xin24m", CLK_IGNORE_UNUSED,
++	COMPOSITE_FRACMUX(CLK_RTC32K_FRAC, "clk_rtc32k_frac", "xin24m", CLK_IS_CRITICAL,
+ 			RK3568_PMU_CLKSEL_CON(1), 0,
+ 			RK3568_PMU_CLKGATE_CON(0), 1, GFLAGS,
+ 			&rk3568_rtc32k_pmu_fracmux),

@@ -1,0 +1,71 @@
+# nibos-hw: the hardware layer for Arch Linux ARM, for one board (NIBOS_BOARD in
+# config.sh): the shared files and daemons, the board's SoC's files and its own.
+#
+# Built from the repository, not downloaded: prepare() copies the daemons'
+# sources and the files to install into $srcdir, so the build never writes to
+# the repository. Dependencies are fetched once, at the versions Cargo.lock pins,
+# and the build itself runs offline. In the build machine:
+#
+#   cd hw && PKGDEST="$PWD/out" BUILDDIR="$HOME/makepkg-build" makepkg -f --nodeps
+
+NIBOS_ROOT=$(cd "$startdir/.." && pwd)
+# shellcheck source=../config.sh
+. "$NIBOS_ROOT/config.sh"
+
+pkgname=nibos-hw
+pkgver=0.1.0
+pkgrel=43
+pkgdesc="nibOS hardware layer for the $BOARD_NAME: one gamepad, audio routing, lid and power, battery protect, LEDs, network on demand, the console's on-screen keyboard, the radios' switches"
+arch=(aarch64)
+# nibos-keys links nibkit (MIT) and draws in its Roboto Condensed (SIL OFL 1.1).
+license=(GPL-3.0-or-later MIT OFL-1.1)
+depends=(systemd pipewire pipewire-pulse wireplumber libpulse alsa-ucm-conf rtkit wireless-regdb)
+makedepends=(cargo python)
+install=nibos-hw.install
+
+prepare() {
+    rm -rf "$srcdir/hw"
+    mkdir -p "$srcdir/hw/daemons"
+    cp -r "$startdir/files" "$startdir/install.sh" "$srcdir/hw/"
+    cp -r "$NIBOS_ROOT/socs/$BOARD_SOC/hw/files" "$srcdir/hw/soc-files"
+    cp -r "$NIBOS_ROOT/boards/$NIBOS_BOARD/hw/files" "$srcdir/hw/board-files"
+    cp -r "$startdir/daemons/Cargo.toml" "$startdir/daemons/Cargo.lock" "$startdir/daemons/src" "$srcdir/hw/daemons/"
+    # nibos-keys draws with the splash's KMS, at the path its #[path] names. (nibkit comes from
+    # its repository, at the tag Cargo.toml names, with the other dependencies.)
+    rm -rf "$srcdir/rootfs"
+    mkdir -p "$srcdir/rootfs/splash/src"
+    cp "$NIBOS_ROOT/rootfs/splash/src/kms.rs" "$srcdir/rootfs/splash/src/"
+    # The board's own tuning files (boards/<board>/hw/*-tuning.py: the RG DS+'s speaker amps),
+    # made from scratch, as /usr/lib/nibos/<chip>-nibos.bin.
+    for gen in "$NIBOS_ROOT/boards/$NIBOS_BOARD/hw/"*-tuning.py; do
+        [ -e "$gen" ] || continue
+        mkdir -p "$srcdir/hw/board-files/usr/lib/nibos"
+        python3 "$gen" "$srcdir/hw/board-files/usr/lib/nibos/$(basename "$gen" -tuning.py)-nibos.bin" >/dev/null
+    done
+    # The board's firmware from its stock image (BOARD_FIRMWARE) isn't packaged: it isn't
+    # ours to redistribute. make-arch.sh puts the user's own copy in the image, and
+    # install-firmware.sh on a running device.
+    cd "$srcdir/hw/daemons"
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+}
+
+build() {
+    cd "$srcdir/hw/daemons"
+    cargo build --release --frozen
+}
+
+check() {
+    cd "$srcdir/hw/daemons"
+    cargo test --release --frozen
+}
+
+package() {
+    "$srcdir/hw/install.sh" "$pkgdir" "$srcdir/hw/daemons/target/release" \
+        "$srcdir/hw/soc-files" "$srcdir/hw/board-files"
+    # nibkit's licence and its fonts', from the copy Cargo fetched.
+    local nibkit
+    nibkit=$(cd "$srcdir/hw/daemons" && cargo metadata --format-version 1 --frozen |
+        python3 -c 'import json, os, sys; print(next(os.path.dirname(p["manifest_path"]) for p in json.load(sys.stdin)["packages"] if p["name"] == "nibkit"))')
+    install -Dm644 "$nibkit/LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.nibkit"
+    install -Dm644 "$nibkit/assets/OFL.txt" "$pkgdir/usr/share/licenses/$pkgname/OFL.txt"
+}

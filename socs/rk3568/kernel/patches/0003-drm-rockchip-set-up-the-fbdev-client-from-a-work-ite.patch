@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 12:20:38 +0900
+Subject: [PATCH 3/4] drm/rockchip: set up the fbdev client from a work item
+
+drm_client_setup() at the end of rockchip_drm_bind() runs the fbdev
+client's first modeset, which powers the panels on: on the RG DS+ the
+better part of a second of panel sleeps. It ran inside the bind of the
+last component, so it held that device's probe and component_mutex all
+that time, and the kernel's root mount waits for every probe to finish
+(wait_for_device_probe()). USB, whose ports register as components,
+waited too.
+
+Schedule it on a work item instead, cancelled on unbind, so the modeset
+overlaps the root mount.
+
+Upstream status: candidate (RFC); other drivers set the client up in bind
+as well, so this may be better solved in the DRM client code.
+---
+ drivers/gpu/drm/rockchip/rockchip_drm_drv.c | 21 ++++++++++++++++++++-
+ drivers/gpu/drm/rockchip/rockchip_drm_drv.h |  2 ++
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/rockchip/rockchip_drm_drv.c b/drivers/gpu/drm/rockchip/rockchip_drm_drv.c
+index 3099408e9..a01bf0fb6 100644
+--- a/drivers/gpu/drm/rockchip/rockchip_drm_drv.c
++++ b/drivers/gpu/drm/rockchip/rockchip_drm_drv.c
+@@ -142,6 +142,21 @@ static void rockchip_iommu_cleanup(struct drm_device *drm_dev)
+ 	iommu_domain_free(private->domain);
+ }
+ 
++/*
++ * The fbdev client's first modeset powers the panels on, which can take the
++ * better part of a second of sleeps. Run inside bind, it holds the probe of the
++ * last component (and component_mutex) all that time, and the kernel's root
++ * mount waits for every probe to finish. From a work item it overlaps the
++ * root mount instead.
++ */
++static void rockchip_drm_client_setup_work(struct work_struct *work)
++{
++	struct rockchip_drm_private *private =
++		container_of(work, struct rockchip_drm_private, client_setup_work);
++
++	drm_client_setup(private->drm, NULL);
++}
++
+ static int rockchip_drm_bind(struct device *dev)
+ {
+ 	struct drm_device *drm_dev;
+@@ -170,6 +185,8 @@ static int rockchip_drm_bind(struct device *dev)
+ 	}
+ 
+ 	drm_dev->dev_private = private;
++	private->drm = drm_dev;
++	INIT_WORK(&private->client_setup_work, rockchip_drm_client_setup_work);
+ 
+ 	ret = drmm_mode_config_init(drm_dev);
+ 	if (ret)
+@@ -199,7 +216,7 @@ static int rockchip_drm_bind(struct device *dev)
+ 	if (ret)
+ 		goto err_kms_helper_poll_fini;
+ 
+-	drm_client_setup(drm_dev, NULL);
++	schedule_work(&private->client_setup_work);
+ 
+ 	return 0;
+ err_kms_helper_poll_fini:
+@@ -216,7 +233,9 @@ static int rockchip_drm_bind(struct device *dev)
+ static void rockchip_drm_unbind(struct device *dev)
+ {
+ 	struct drm_device *drm_dev = dev_get_drvdata(dev);
++	struct rockchip_drm_private *private = drm_dev->dev_private;
+ 
++	cancel_work_sync(&private->client_setup_work);
+ 	drm_dev_unregister(drm_dev);
+ 
+ 	drm_kms_helper_poll_fini(drm_dev);
+diff --git a/drivers/gpu/drm/rockchip/rockchip_drm_drv.h b/drivers/gpu/drm/rockchip/rockchip_drm_drv.h
+index 4705dc6b8..d4c4c29f1 100644
+--- a/drivers/gpu/drm/rockchip/rockchip_drm_drv.h
++++ b/drivers/gpu/drm/rockchip/rockchip_drm_drv.h
+@@ -73,6 +73,8 @@ struct rockchip_drm_private {
+ 	struct device *iommu_dev;
+ 	struct mutex mm_lock;
+ 	struct drm_mm mm;
++	struct drm_device *drm;
++	struct work_struct client_setup_work;
+ };
+ 
+ struct rockchip_encoder {

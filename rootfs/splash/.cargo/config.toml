@@ -1,0 +1,3 @@
+# A static binary: it runs as init, before anything but the root file system is there.
+[build]
+rustflags = ["-C", "target-feature=+crt-static"]

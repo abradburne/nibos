@@ -1,0 +1,98 @@
+#!/bin/bash
+# shellcheck disable=SC2034,SC1091 # sourced by PortMaster and its ports, which use and set these
+#
+# SPDX-License-Identifier: MIT
+#
+# PortMaster's control.txt for nibOS: every port sources it (through the copy nibOS puts in
+# $controlfolder) before it starts. It says where PortMaster and the port are, runs the port
+# as the user (no sudo), on the top screen, and gives SDL the device's gamepad.
+
+## Ports print to the console only on firmwares that show one; nibOS doesn't.
+CUR_TTY=/dev/null
+
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+export controlfolder="${controlfolder:-$XDG_DATA_HOME/PortMaster}"
+
+## A port finds its folder as /$directory/ports/<folder>: Roms/PORTS on the card it is on
+## (FAT and exFAT ignore case, so .../ports is .../PORTS). The script's own path says which
+## card; run-port names the script, $0 is it when a port is started by hand.
+nibos_port_card() {
+  case "$(realpath -m "$1" 2>/dev/null)" in
+    /mnt/ds/Roms/*)   echo "mnt/ds/Roms" ;;
+    /mnt/roms/Roms/*) echo "mnt/roms/Roms" ;;
+    *)                return 1 ;;
+  esac
+}
+
+if ! directory="$(nibos_port_card "${NIBOS_PORT_SCRIPT:-$0}")"; then
+  if [ -n "$NIBOS_PORTS_DIR" ]; then
+    directory="$(dirname "${NIBOS_PORTS_DIR#/}")"
+  elif [ -d /mnt/ds/Roms ]; then
+    directory="mnt/ds/Roms"
+  else
+    directory="mnt/roms/Roms"
+  fi
+fi
+export directory
+
+## Everything runs as the user: no sudo, no bind mounts (symbolic links instead), and
+## gptokeyb kills the game with the user's own pkill.
+export ESUDO=""
+export ESUDOKILL="-1"
+export ESUDOKILL2="-1"
+export PM_CAN_MOUNT="N"
+
+## The screens: SDL display 0 is the bottom (touch) panel on the RG DS+, so put the top panel
+## first; a port opens one window on display 0. SDL3's KMSDRM driver sorts its displays by
+## this hint (connector names), and sdl2-compat passes it through to SDL2 programs.
+if [ -f /usr/lib/nibos/board.conf ]; then
+  NIBOS_BOARD="$(. /usr/lib/nibos/board.conf; echo "$NIBOS_BOARD")"
+fi
+case "$NIBOS_BOARD" in
+  rg-ds-plus) export SDL_VIDEO_DISPLAY_PRIORITY="${SDL_VIDEO_DISPLAY_PRIORITY:-DSI-2}" ;;
+esac
+export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
+## SDL3's atomic KMS path has no plane for the second panel (AGENTS.md, "Graphics").
+export SDL_KMSDRM_ATOMIC="${SDL_KMSDRM_ATOMIC:-0}"
+
+## Libraries PortMaster's own builds were linked against under older names: LÖVE (the splash
+## and LÖVE ports) wants libtheoradec.so.1, which Arch now ships as .so.2 (the same functions).
+## Last on the path, so a port's own copy wins.
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}/usr/lib/portmaster/compat"
+
+## The device's one gamepad ("Anbernic RG DS+ Gamepad", from nibos-input). Only its own line:
+## all of gamecontrollerdb.txt (460 KB) is too long for SDL_GAMECONTROLLERCONFIG, which the
+## ports export (the kernel limits one variable to 128 KB).
+export SDL_GAMECONTROLLERCONFIG_FILE="$controlfolder/nibos/gamecontrollerdb.txt"
+SDLDBFILE="$SDL_GAMECONTROLLERCONFIG_FILE"
+SDLDBUSERFILE="${HOME}/.config/SDL-GameControllerDB/gamecontrollerdb.txt"
+[ ! -f "${SDLDBUSERFILE}" ] && SDLDBUSERFILE="$SDL_GAMECONTROLLERCONFIG_FILE"
+
+get_controls() {
+  ANALOGSTICKS="${ANALOG_STICKS:-1}"
+  LOWRES="N"
+  DEVICE="$(cut -d, -f1 "$SDL_GAMECONTROLLERCONFIG_FILE" | head -n1)"
+  param_device="rg-ds-plus"
+
+  ## A line of the user's own for the gamepad wins.
+  if [ "$SDLDBUSERFILE" != "$SDL_GAMECONTROLLERCONFIG_FILE" ] && grep -q "^$DEVICE," "$SDLDBUSERFILE" 2>/dev/null; then
+    export SDL_GAMECONTROLLERCONFIG_FILE="$SDLDBUSERFILE"
+    sdl_controllerconfig="$(grep "^$DEVICE," "$SDLDBUSERFILE")"
+  else
+    sdl_controllerconfig="$(< "$SDL_GAMECONTROLLERCONFIG_FILE")"
+  fi
+}
+
+source "$controlfolder/device_info.txt"
+
+## device_info.txt names the firmware from /etc/os-release ("Arch Linux ARM") unless it knows
+## nibOS (PortMaster's own nibOS profile); mod_nibOS.txt is chosen by this name.
+export CFW_NAME="nibOS"
+
+source "$controlfolder/funcs.txt"
+
+## gptokeyb runs pkill/pgrep through sh to end the game; ports export LD_LIBRARY_PATH with
+## their own libraries (an old libreadline breaks the system's bash). sudo clears it on other
+## firmwares; here gptokeyb runs as the user, so clear it.
+export GPTOKEYB2="env -u LD_LIBRARY_PATH LD_PRELOAD=$controlfolder/libinterpose.${DEVICE_ARCH}.so $controlfolder/gptokeyb2 $ESUDOKILL2"
+export GPTOKEYB="env -u LD_LIBRARY_PATH $controlfolder/gptokeyb $ESUDOKILL"

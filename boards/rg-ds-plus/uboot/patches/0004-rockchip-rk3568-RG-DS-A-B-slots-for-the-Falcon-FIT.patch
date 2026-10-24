@@ -1,0 +1,131 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Wed, 21 Oct 2026 16:30:00 +0900
+Subject: [PATCH 4/4] rockchip: rk3568: RG DS: A/B slots for the Falcon FIT
+
+nibOS updates write the slot that isn't running and restart into it; a
+slot that never reaches its boot UI must hand back to the old one by
+itself. In the Falcon build (SPL boots the FIT at sector 0x28000), SPL
+now reads a boot control block in the Falcon partition's last KiB (two
+copies of one sector: "NIBB", version, active slot, tries left and good
+per slot, sequence number, CRC-32) and picks slot A's FIT (the
+partition's start) or slot B's (32 MiB in):
+
+- a good slot boots with nothing written;
+- a slot on trial uses up a try, written to the older copy first;
+- a slot with no tries left hands over to the other one if it is good,
+  else to the fallback U-Boot.
+
+Holding A is still checked first, and a card with no valid block boots
+slot A as before. nibOS's nibos-bootctl writes the same block by the
+same rules (nibos docs/design/ab-rollback.md).
+
+Upstream status: board-specific, not for upstream (nibOS's own scheme).
+---
+ arch/arm/mach-rockchip/rk3568/rk3568.c | 83 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 83 insertions(+)
+
+diff --git a/arch/arm/mach-rockchip/rk3568/rk3568.c b/arch/arm/mach-rockchip/rk3568/rk3568.c
+index 766b73a..e758b56 100644
+--- a/arch/arm/mach-rockchip/rk3568/rk3568.c
++++ b/arch/arm/mach-rockchip/rk3568/rk3568.c
+@@ -260,13 +260,96 @@ bool rockchip_dwmmc_board_no_uhs(void)
+ 	return hatch_held();
+ }
+ 
++#if CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR == 0x28000
++#include <blk.h>
++#include <memalign.h>
++#include <mmc.h>
++#include <u-boot/crc.h>
++#include <asm/unaligned.h>
++
++/*
++ * nibOS A/B slots (nibos docs/design/ab-rollback.md), when SPL boots the
++ * Falcon FIT: both slots' FITs live in the Falcon partition (A at its start,
++ * B 32 MiB in) with a boot control block in its last KiB, two copies of one
++ * sector: "NIBB", version 1, the active slot, tries left and good per slot,
++ * a sequence number (the whole copy with the higher one wins) and a CRC-32 of
++ * the first 508 bytes. A good slot boots with nothing written; a slot on
++ * trial uses up a try (written, the older copy first); a slot with none left
++ * hands over to the other if that one is good, else to the fallback U-Boot.
++ * No valid block: slot A, as before. nibos-bootctl (hw/daemons) keeps the
++ * same rules.
++ */
++#define AB_SLOT_B		0x10000		/* sectors: 32 MiB */
++#define AB_BLOCK		(0x20000 - 2)	/* the partition's last KiB */
++
++static bool ab_valid(const u8 *s)
++{
++	return !memcmp(s, "NIBB", 4) && s[4] == 1 && s[5] <= 1 &&
++	       crc32(0, s, 508) == get_unaligned_le32(s + 508);
++}
++
++static unsigned long ab_pick(struct mmc *mmc, unsigned long base)
++{
++	ALLOC_CACHE_ALIGN_BUFFER(u8, buf, 2 * 512);
++	struct blk_desc *bd = mmc_get_blk_desc(mmc);
++	u8 *blk, *older;
++	int a, o;
++
++	if (!bd || blk_dread(bd, base + AB_BLOCK, 2, buf) != 2)
++		return base;
++	if (ab_valid(buf) && ab_valid(buf + 512)) {
++		bool second = get_unaligned_le32(buf + 522) >
++			      get_unaligned_le32(buf + 10);
++
++		blk = second ? buf + 512 : buf;
++		older = second ? buf : buf + 512;
++	} else if (ab_valid(buf)) {
++		blk = buf;
++		older = buf + 512;
++	} else if (ab_valid(buf + 512)) {
++		blk = buf + 512;
++		older = buf;
++	} else {
++		return base;
++	}
++
++	a = blk[5];
++	o = !a;
++	if (blk[8 + a])
++		return a ? base + AB_SLOT_B : base;
++	if (blk[6 + a]) {
++		blk[6 + a]--;
++		printf("A/B: slot %c on trial, %d tries left\n", 'A' + a, blk[6 + a]);
++	} else if (blk[8 + o]) {
++		blk[5] = o;
++		printf("A/B: slot %c failed, back to slot %c\n", 'A' + a, 'A' + o);
++		a = o;
++	} else {
++		printf("A/B: no good slot: the fallback U-Boot\n");
++		return FALLBACK_SECTOR;
++	}
++	put_unaligned_le32(get_unaligned_le32(blk + 10) + 1, blk + 10);
++	put_unaligned_le32(crc32(0, blk, 508), blk + 508);
++	/* The older copy first, then the newer: one stays whole. */
++	memcpy(older, blk, 512);
++	blk_dwrite(bd, base + AB_BLOCK + (older == buf ? 0 : 1), 1, older);
++	blk_dwrite(bd, base + AB_BLOCK + (older == buf ? 1 : 0), 1, older);
++
++	return a ? base + AB_SLOT_B : base;
++}
++#endif
++
+ unsigned long board_spl_mmc_get_uboot_raw_sector(struct mmc *mmc,
+ 						 unsigned long raw_sect)
+ {
+ 	if (hatch_held())
+ 		return FALLBACK_SECTOR;
+ 
++#if CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR == 0x28000
++	return ab_pick(mmc, raw_sect);
++#else
+ 	return raw_sect;
++#endif
+ }
+ #endif
+ 
+-- 
+2.47.0
+

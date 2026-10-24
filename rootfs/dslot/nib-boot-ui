@@ -1,0 +1,27 @@
+#!/bin/sh
+# nib boot-ui: DSlot on both screens at power-on, or the tty1 shell.
+#
+#   nib boot-ui on       DSlot at power-on instead of the tty1 login shell
+#   nib boot-ui off      the tty1 autologin shell again
+#   nib boot-ui status   which of the two starts
+#
+# Leaving DSlot (Select + Start) or DSlot failing starts the shell on tty1
+# either way. Changing it needs root. Installed by rootfs/dslot/install.sh.
+set -eu
+case "${1:-status}" in
+on)
+    systemctl enable dslot.service
+    systemctl disable getty@tty1.service
+    ;;
+off)
+    systemctl disable dslot.service
+    systemctl enable getty@tty1.service
+    ;;
+status)
+    if systemctl -q is-enabled dslot.service; then echo "boot: dslot"; else echo "boot: shell"; fi
+    ;;
+*)
+    echo "usage: nib boot-ui on|off|status" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,85 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 08:16:11 +0900
+Subject: [PATCH 1/4] board_f: turn the data cache on before relocation on
+ RK3568
+
+Before relocation U-Boot runs with the data cache off, so while the
+driver model reads the device tree and walks the driver tables every
+access goes to DRAM: 0.92 s of the RG DS+'s boot was U-Boot before
+relocation.
+
+Turn the data cache on at the start of board_init_f(), with page tables
+in spare RAM at 0x0e000000 that nothing uses before relocation, and off
+again (flushed) just before the relocated copy is made; board_r sets up
+its own tables as before.
+
+Upstream status: board-specific hack, not for upstream as written: the
+fixed table address and the RK3568-only condition. A generic early-cache
+option would need each SoC to say where tables can live.
+---
+ common/board_f.c | 35 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 35 insertions(+)
+
+diff --git a/common/board_f.c b/common/board_f.c
+index 9efcd949..a139d11f 100644
+--- a/common/board_f.c
++++ b/common/board_f.c
+@@ -914,6 +914,39 @@ static int initf_upl(void)
+ 	return 0;
+ }
+ 
++#if IS_ENABLED(CONFIG_ARM64) && !CONFIG_IS_ENABLED(SYS_DCACHE_OFF) && \
++	IS_ENABLED(CONFIG_ROCKCHIP_RK3568)
++/*
++ * Run board_init_f() with the data cache on: before relocation the driver
++ * model reads the device tree and the driver tables with every access going to
++ * DRAM, which takes most of a second here. The page tables go in spare RAM
++ * that nothing uses before relocation; the cache goes off again (flushed)
++ * before the relocated copy is made, and board_r sets up its own tables.
++ */
++#define EARLY_TLB_ADDR	0x0e000000
++
++static int initf_dcache_on(void)
++{
++	gd->arch.tlb_addr = EARLY_TLB_ADDR;
++	gd->arch.tlb_size = get_page_table_size();
++	dcache_enable();
++
++	return 0;
++}
++
++static int initf_dcache_off(void)
++{
++	dcache_disable();
++	/* arch_reserve_mmu() moved tlb_addr; board_r builds the tables there */
++	gd->arch.tlb_fillptr = 0;
++
++	return 0;
++}
++#else
++static int initf_dcache_on(void) { return 0; }
++static int initf_dcache_off(void) { return 0; }
++#endif
++
+ static void initcall_run_f(void)
+ {
+ 	/*
+@@ -921,6 +954,7 @@ static void initcall_run_f(void)
+ 	 * For simplicity it should remain an ordered list of function calls.
+ 	 */
+ 	INITCALL(setup_mon_len);
++	INITCALL(initf_dcache_on);
+ 	INITCALL(initf_malloc);
+ #if CONFIG_IS_ENABLED(OF_CONTROL)
+ 	INITCALL(fdtdec_setup);
+@@ -1049,6 +1083,7 @@ static void initcall_run_f(void)
+ #endif
+ 	INITCALL(reloc_bootstage);
+ 	INITCALL(reloc_bloblist);
++	INITCALL(initf_dcache_off);
+ 	INITCALL(setup_reloc);
+ #if CONFIG_IS_ENABLED(X86) || CONFIG_IS_ENABLED(ARC)
+ 	INITCALL(copy_uboot_to_ram);
+
+base-commit: 4a790dac10777b478333c04f05ba66b2636706d4

@@ -1,0 +1,10 @@
+# nibOS: the safe mode, started by dslot.service's OnFailure= once DSlot has failed too often
+# (dslot.service.d/nibos-recovery.conf): /usr/lib/nibos/safe-mode, rootfs/safe-mode.
+[Unit]
+Description=Safe mode: the boot UI keeps failing
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/nibos/safe-mode

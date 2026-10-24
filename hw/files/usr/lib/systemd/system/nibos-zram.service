@@ -1,0 +1,20 @@
+# nibos-hw: compressed swap in RAM, as large as RAM, set up once booted.
+# lz4 rather than zstd: it swaps out faster (a 900 MB fill under pressure, 3.1-3.2 s against
+# 4.2-6.3 s, 2026-10-21), which matters more on a handheld than the better ratio. Swap is read
+# a page at a time (page-cluster 0, sysctl.d/50-nibos-zram.conf): neighbours in zram aren't
+# neighbours on disk.
+[Unit]
+Description=Compressed swap in RAM (zram)
+# Once booted, not as part of it: as a swap.target member it holds up /tmp, and with it
+# local-fs.target and everything after, until udev has seen /dev/zram0.
+After=multi-user.target
+ConditionPathExists=/sys/class/zram-control
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'dev=$(zramctl --find --size "$(awk "/MemTotal/ { print \\$2 }" /proc/meminfo)KiB" --algorithm lz4) && mkswap -q "$dev" && swapon --discard --priority 100 "$dev"'
+ExecStop=/bin/sh -c 'for d in /dev/zram*; do swapoff "$d" 2>/dev/null; zramctl --reset "$d" 2>/dev/null; done; true'
+
+[Install]
+WantedBy=multi-user.target

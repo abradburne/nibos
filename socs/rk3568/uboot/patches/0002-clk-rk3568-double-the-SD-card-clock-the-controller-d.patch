@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 08:16:11 +0900
+Subject: [PATCH 2/4] clk: rk3568: double the SD card clock the controller
+ divides by two
+
+The dw_mmc controller divides its clock input by two, which Linux and
+clk_rk3399.c account for by asking the CRU for double the card rate.
+clk_rk3568.c did not, so "50 MHz" High Speed ran the RG DS+ card at
+25 MHz and reading the 11.75 MB kernel took 0.98 s instead of 0.50 s.
+
+Ask the CRU for twice the rate for CLK_SDMMC0 above 1 MHz.
+
+Upstream status: candidate (should cover the other SD/eMMC clock IDs of
+the RK3568 too).
+---
+ drivers/clk/rockchip/clk_rk3568.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/clk/rockchip/clk_rk3568.c b/drivers/clk/rockchip/clk_rk3568.c
+index bb49af35..307a591e 100644
+--- a/drivers/clk/rockchip/clk_rk3568.c
++++ b/drivers/clk/rockchip/clk_rk3568.c
+@@ -1443,6 +1443,13 @@ static ulong rk3568_sdmmc_set_clk(struct rk3568_clk_priv *priv,
+ 	struct rk3568_cru *cru = priv->cru;
+ 	int src_clk;
+ 
++	/*
++	 * The SD controller divides its clock by two (Linux and clk_rk3399.c
++	 * ask the CRU for double), so "50 MHz" ran the card at 25 MHz.
++	 */
++	if (clk_id == CLK_SDMMC0 && rate > 1 * MHz)
++		rate *= 2;
++
+ 	switch (rate) {
+ 	case OSC_HZ:
+ 	case 26 * MHz:

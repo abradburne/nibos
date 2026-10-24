@@ -1,0 +1,34 @@
+#!/bin/sh
+# nib net: bring the network (Wi-Fi and Bluetooth) up and down on demand.
+#
+# Both radios, for the network modes; the user's Wi-Fi switch is `nib wifi`, which leaves
+# Bluetooth alone.
+#
+#   nib net up | down | status
+#   nib net mode boot|deferred|demand    how the system starts it
+#
+#   boot      with the system (the dev system)
+#   deferred  once start-up has finished, at low priority (a productivity setup)
+#   demand    only when something asks (a game player: RetroAchievements, updates)
+#
+# Changing it needs root (or polkit). hw/README.md, "Network modes".
+set -eu
+t=nibos-network.target
+d=nibos-network-deferred.service
+m=nibos-network-modules.service
+case "${1:-status}" in
+up)     exec systemctl start "$t" ;;
+down)   systemctl stop "$t"; systemctl stop iwd.service bluetooth.service 2>/dev/null || true
+        exec systemctl stop "$m" ;;
+status) if systemctl is-active --quiet "$t"; then echo up; else echo down; fi
+        if systemctl is-enabled --quiet "$t" 2>/dev/null; then echo "mode: boot"
+        elif systemctl is-enabled --quiet "$d" 2>/dev/null; then echo "mode: deferred"
+        else echo "mode: demand"; fi ;;
+mode)   case "${2:-}" in
+        boot)     systemctl disable "$d" >/dev/null 2>&1 || true; systemctl enable "$t" "$m" ;;
+        deferred) systemctl disable "$t" "$m" >/dev/null 2>&1 || true; systemctl enable "$d" ;;
+        demand)   systemctl disable "$t" "$d" "$m" >/dev/null 2>&1 || true ;;
+        *) echo "usage: nib net mode boot|deferred|demand" >&2; exit 2 ;;
+        esac ;;
+*)      echo "usage: nib net up|down|status|mode boot|deferred|demand" >&2; exit 2 ;;
+esac

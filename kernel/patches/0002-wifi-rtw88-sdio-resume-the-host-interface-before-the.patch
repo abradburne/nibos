@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Sun, 18 Oct 2026 10:50:20 +0900
+Subject: [PATCH 2/3] wifi: rtw88: sdio: resume the host interface before the
+ first MAC access
+
+In SDIO 3.0 (UHS) mode rtw88 reaches the MAC registers through the
+chip's indirect access engine. An RTL8821CS fresh from power-up has its
+SDIO host interface suspended (REG_SDIO_HSUS_CTRL = 0x19, HCI_SUS_REQ
+set), and the engine does not answer then. rtw88 clears HCI_SUS_REQ
+only in rtw_mac_pre_system_cfg(), after the chip version read
+(REG_SYS_CFG1) and its own first write, so on the RG DS+ every cold boot
+logged
+
+  sdio read32 failed (0xf0): -110
+  sdio write8 failed (0x1c): -110
+
+read the version as 0 instead of 0x00494d31, set the chip up as an A-cut
+instead of an E-cut, and any suspend afterwards never woke. Once rtw88
+has powered the chip up the state survives a WL_REG_ON reset, which is
+why a module reload was always clean.
+
+Clear HCI_SUS_REQ at probe, before the first indirect access. Direct
+CMD52 access is not an alternative: it reaches the system registers
+below 0x100 before power-on but not the MAC above.
+
+Upstream status: candidate.
+---
+ drivers/net/wireless/realtek/rtw88/sdio.c | 28 +++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/drivers/net/wireless/realtek/rtw88/sdio.c b/drivers/net/wireless/realtek/rtw88/sdio.c
+index 5b40d74b1..14d9105e4 100644
+--- a/drivers/net/wireless/realtek/rtw88/sdio.c
++++ b/drivers/net/wireless/realtek/rtw88/sdio.c
+@@ -680,6 +680,28 @@ static void rtw_sdio_init(struct rtw_dev *rtwdev)
+ 	rtwsdio->irq_mask = REG_SDIO_HIMR_RX_REQUEST | REG_SDIO_HIMR_CPWM1;
+ }
+ 
++/*
++ * A chip fresh from power-up (VDD, not just CHIP_EN) has its SDIO host
++ * interface suspended. In SDIO 3.0 mode MAC registers are read and written
++ * through the indirect access engine, which does not answer then: the chip
++ * version read in rtw_chip_info_setup() times out and reads as 0 (A-cut), and
++ * rtw_mac_pre_system_cfg() loses its first write before it lifts the suspend
++ * itself. On the RG DS+ the chip set up from that hangs system suspend for
++ * good. Lift the suspend here, before any MAC register access.
++ */
++static int rtw_sdio_resume_hci(struct rtw_dev *rtwdev)
++{
++	u8 val = rtw_read8(rtwdev, REG_SDIO_HSUS_CTRL);
++
++	if (!(val & BIT_HCI_SUS_REQ))
++		return 0;
++
++	rtw_write8(rtwdev, REG_SDIO_HSUS_CTRL, val & ~BIT_HCI_SUS_REQ);
++
++	return read_poll_timeout(rtw_read8, val, val & BIT_HCI_RESUME_RDY,
++				 10, 10000, false, rtwdev, REG_SDIO_HSUS_CTRL);
++}
++
+ static void rtw_sdio_enable_rx_aggregation(struct rtw_dev *rtwdev)
+ {
+ 	u8 size, timeout;
+@@ -1360,6 +1382,12 @@ int rtw_sdio_probe(struct sdio_func *sdio_func,
+ 
+ 	rtw_sdio_init(rtwdev);
+ 
++	ret = rtw_sdio_resume_hci(rtwdev);
++	if (ret) {
++		rtw_err(rtwdev, "failed to resume the SDIO host interface");
++		goto err_sdio_declaim;
++	}
++
+ 	ret = rtw_sdio_init_tx(rtwdev);
+ 	if (ret) {
+ 		rtw_err(rtwdev, "failed to init SDIO TX queue\n");

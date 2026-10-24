@@ -1,0 +1,35 @@
+nibOS @VERSION@ (@EDITION@) for the Anbernic RG DS+
+
+nibOS's own code is free software under the GNU GPL, version 3 or later (licenses/
+nibos-GPL-3.0.txt; https://github.com/abradburne/nibos, at @NIBOS_COMMIT@); its SDK library,
+nibkit, is MIT (licenses/nibkit-MIT.txt).
+It is built on Arch Linux ARM and is not affiliated with Arch Linux, Arch Linux ARM or
+Anbernic. This image contains the following, each under its own licence; the licence texts
+are in /usr/share/licenses/ on the device and in licenses/ on this partition.
+
+Built here, from source
+- Linux @KERNEL_COMMIT@ with nibOS's patches: GPL-2.0.
+- U-Boot @UBOOT_TAG@ with nibOS's patches (SPL and the fallback U-Boot): GPL-2.0+.
+- nibOS's hardware layer (nibos-hw), the boot and goodbye pictures (the splash, with dsboot's
+  art) and the safe mode: GPL-3.0-or-later. nibkit, built into DSlot and the emulators: MIT.
+- The console font (Terminus, built into the kernel): GPL-2.0, with the kernel.
+@EXTRA_COMPONENTS@
+Not free software, redistributed under their licences
+- Rockchip's DDR init (@RKBIN_DDR@) and TF-A BL31 (@RKBIN_BL31@), from rkbin at
+  @RKBIN_COMMIT@ (licenses/rkbin.txt). Built into the bootloader at the start of the card.
+- Realtek's Wi-Fi and Bluetooth firmware for the RTL8821CS, from linux-firmware
+  (licenses/LICENCE.rtlwifi_firmware.txt; which licence covers which firmware file:
+  licenses/WHENCE).
+
+Not included
+- The speaker amplifiers' tuning file (Awinic's), which isn't ours to redistribute: see the
+  documentation for importing it from your own stock card.
+
+Every Arch Linux ARM package in the image, with its version and licence, is listed in
+packages.txt on this partition (and /usr/share/doc/nibos/packages.txt).
+
+Source code
+The complete corresponding source for the GPL and LGPL software in this image (nibOS's
+trees at the commits above, and the source packages of every GPL and LGPL package listed in
+packages.txt) is published with the image at @SOURCE_URL@, and will be for at least three
+years after this image was last offered.

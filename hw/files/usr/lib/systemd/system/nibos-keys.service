@@ -1,0 +1,15 @@
+# nibos-hw: the console's on-screen keyboard (/usr/bin/nibos-keys, hw/daemons): the bottom
+# screen while tty1's console is in front, typing into it; Menu + X shows and hides it. Started
+# with getty@tty1 (getty@tty1.service.d/nibos-keys.conf) and stopped with it, and stopped
+# before the boot UI or the safe mode take the screens, so they find the card free.
+[Unit]
+Description=On-screen keyboard for the console
+BindsTo=getty@tty1.service
+After=getty@tty1.service
+Conflicts=dslot.service nibos-safe-mode.service
+Before=dslot.service nibos-safe-mode.service
+
+[Service]
+ExecStart=/usr/bin/nibos-keys
+Restart=on-failure
+RestartSec=2

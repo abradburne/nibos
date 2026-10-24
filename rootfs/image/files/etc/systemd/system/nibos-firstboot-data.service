@@ -1,0 +1,18 @@
+# nibos (a downloadable image; rootfs/image/): the data partition over the rest of the card, on
+# the first boot (/usr/lib/nibos/firstboot-data), before anything uses /mnt/roms.
+[Unit]
+Description=Make the data partition (first boot)
+DefaultDependencies=no
+RequiresMountsFor=/var/lib/nibos/state
+ConditionPathExists=/var/lib/nibos/state/data-partition
+After=systemd-udev-settle.service
+Before=mnt-roms.automount mnt-roms.mount nibos-bootlog.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/nibos/firstboot-data
+RemainAfterExit=yes
+
+[Install]
+WantedBy=local-fs.target

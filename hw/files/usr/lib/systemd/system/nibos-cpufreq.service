@@ -1,0 +1,12 @@
+# nibos-hw: the kernel boots with the performance governor so start-up runs
+# at full speed; once booted, this hands the CPU clock to schedutil.
+[Unit]
+Description=Hand the CPU clock to schedutil once booted
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do echo schedutil > "$g"; done'
+
+[Install]
+WantedBy=multi-user.target

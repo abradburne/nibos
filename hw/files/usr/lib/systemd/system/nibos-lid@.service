@@ -1,0 +1,8 @@
+# nibos-hw: `nib lid sleep|ignore` for a user who isn't root: applies the setting (%i) as root.
+# polkit decides who may start it (on a nibOS image, wheel).
+[Unit]
+Description=Lid closing: %i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/nibos/nib-lid apply %i

@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 09:02:45 +0900
+Subject: [PATCH 3/4] blk: stop the partition scan at the first unused entry
+
+part_create_block_devices() tried all MAX_SEARCH_PARTITIONS (128)
+entries, and every part_get_info() reads and checks the whole GPT again:
+for the RG DS+ card's 12 partitions the 116 empty entries cost 0.15 s of
+every boot.
+
+Stop at the first entry that isn't there. Only EFI uses these partition
+devices; a table with holes in its numbering would lose the partitions
+after the first hole.
+
+Upstream status: board-specific hack, not for upstream as written (holes
+in a GPT are legal); a cached GPT read would be the general fix.
+---
+ drivers/block/blk-uclass.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/block/blk-uclass.c b/drivers/block/blk-uclass.c
+index 73c24fd9..eb6bf034 100644
+--- a/drivers/block/blk-uclass.c
++++ b/drivers/block/blk-uclass.c
+@@ -796,8 +796,13 @@ static int part_create_block_devices(struct udevice *blk_dev)
+ 
+ 	/* Add devices for each partition */
+ 	for (count = 0, part = 1; part <= MAX_SEARCH_PARTITIONS; part++) {
++		/*
++		 * Stop at the first unused entry: every part_get_info() reads and
++		 * checks the whole GPT again, and the 116 empty entries of a
++		 * 12-partition card took 0.15 s. Only EFI uses these devices.
++		 */
+ 		if (part_get_info(desc, part, &info))
+-			continue;
++			break;
+ 		snprintf(devname, sizeof(devname), "%s:%d", blk_dev->name,
+ 			 part);
+ 

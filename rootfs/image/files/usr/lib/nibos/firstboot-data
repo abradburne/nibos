@@ -1,0 +1,76 @@
+#!/bin/sh
+# nibos-firstboot-data (a downloadable image's first boot; docs/design/images.md): makes the
+# data partition, NIBOS-DATA (exFAT: Roms, BIOS, Saves, APPS), over the rest of the card, after
+# the image's last partition. A marker on the state partition says how far it got, written
+# before each step, so a power cut resumes where it stopped:
+#
+#   factory -> creating (the partition) -> formatting -> done
+#
+# It never formats a partition that holds a file system it doesn't recognise as its own.
+# DISK and MARKER override the card and the marker (for testing on an image file).
+set -eu
+marker=${MARKER:-/var/lib/nibos/state/data-partition}
+label=NIBOS-DATA
+partname=nibos-data
+step=$(cat "$marker" 2>/dev/null || echo "done")
+[ "$step" != "done" ] || exit 0
+set_step() { echo "$1" > "$marker.tmp" && sync "$marker.tmp" && mv "$marker.tmp" "$marker" && sync "$marker"; step=$1; }
+
+disk=${DISK:-/dev/$(lsblk -no PKNAME "$(findmnt -no SOURCE /)")}   # /dev/mmcblk0
+part() { lsblk -lnpo NAME,PARTLABEL "$disk" | awk -v n="$partname" '$2 == n { print $1 }'; }
+
+if [ "$step" = factory ]; then
+    [ -z "$(part)" ] || { echo "firstboot-data: $disk already has a $partname partition: leaving it" >&2; set_step "done"; exit 0; }
+    set_step creating
+fi
+if [ "$step" = creating ]; then
+    if [ -z "$(part)" ]; then
+        # The image's backup GPT is at the image's end; move it to the card's, then add the
+        # partition over the rest of the card. It starts 8 MiB after the last partition: the
+        # image file runs 1 MiB past that partition (its backup GPT, tools/assemble-image.sh),
+        # so writing a newer image over the card later stops short of this partition and the
+        # games and saves on it stay. The card is in use (the root is on it), so the kernel
+        # isn't asked to read the whole table again, only to add the new partition.
+        sfdisk -q --no-reread --relocate gpt-bak-std "$disk"
+        last=$(sfdisk -d "$disk" | sed -n 's/.*start= *\([0-9]*\), size= *\([0-9]*\).*/\1 \2/p' |
+            awk '{ e = $1 + $2; if (e > m) m = e } END { print m }')
+        start=$(( (last + 16384 + 2047) / 2048 * 2048 ))
+        echo "start=$start, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name=$partname" |
+            sfdisk -q --no-reread --no-tell-kernel --append "$disk"
+        partx -a "$disk" 2>/dev/null || true
+        for _ in 1 2 3 4 5 6 7 8 9 10; do [ -n "$(part)" ] && [ -b "$(part)" ] && break; sleep 0.5; done
+    fi
+    [ -n "$(part)" ] || { echo "firstboot-data: couldn't make the partition" >&2; exit 1; }
+    # A card that had nibOS before and was written again: the image's table has no data
+    # partition, but the new one lands where the old one was (the same layout, and past the
+    # image's end), and that NIBOS-DATA (the games, the saves) is still there, whole. Keep it.
+    # Checked here, before "formatting" is written, so that only a format of ours that a power
+    # cut stopped is ever formatted again.
+    if [ "$(blkid -p -o value -s TYPE "$(part)" 2>/dev/null)" = exfat ] &&
+        [ "$(blkid -p -o value -s LABEL "$(part)" 2>/dev/null)" = "$label" ]; then
+        echo "firstboot-data: $(part) already holds $label (a card written again): keeping it"
+        set_step "done"
+        exit 0
+    fi
+    set_step formatting
+fi
+if [ "$step" = formatting ]; then
+    p=$(part)
+    found=$(blkid -p -o value -s TYPE "$p" 2>/dev/null || true)
+    have=$(blkid -p -o value -s LABEL "$p" 2>/dev/null || true)
+    # Nothing there, or our own half-made exFAT from a format a power cut stopped.
+    if [ -n "$found" ] && ! { [ "$found" = exfat ] && [ "$have" = "$label" ]; }; then
+        echo "firstboot-data: $p holds a $found file system: not formatting it" >&2
+        set_step "done"
+        exit 0
+    fi
+    mkfs.exfat -q -L "$label" "$p"
+    mnt=$(mktemp -d)
+    mount -t exfat "$p" "$mnt"
+    mkdir -p "$mnt/Roms/NDS" "$mnt/Roms/GBA" "$mnt/Roms/GB" "$mnt/Roms/GBC" "$mnt/BIOS" \
+        "$mnt/Saves" "$mnt/APPS" "$mnt/nibos/wifi"
+    umount "$mnt"
+    rmdir "$mnt"
+    set_step "done"
+fi
+echo "firstboot-data: $label ready"

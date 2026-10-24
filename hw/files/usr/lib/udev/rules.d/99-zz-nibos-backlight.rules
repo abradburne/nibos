@@ -1,0 +1,5 @@
+# nibos-hw: nibOS keeps the backlights' levels itself (nibos-backlight.service,
+# nibos-backlight), so systemd's own restore (systemd-backlight@, which
+# 99-systemd.rules asks for and this file sorts after) doesn't do it a second
+# time, later, without the floor.
+SUBSYSTEM=="backlight", ENV{SYSTEMD_WANTS}=""

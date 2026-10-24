@@ -1,0 +1,34 @@
+#!/bin/sh
+# nib lid: whether closing the lid puts the device to sleep.
+#
+#   nib lid                  sleep or ignore, as set now
+#   nib lid sleep|ignore     from now on, kept across restarts
+#
+# `ignore` leaves the device running with the lid closed (on the charger or not); the power key
+# still sleeps it. The setting is a logind drop-in, /etc/systemd/logind.conf.d/60-nibos-lid.conf,
+# over the board's own (/usr/lib/systemd/logind.conf.d/50-nibos.conf); logind reloads it at
+# once. As root it is written directly; otherwise through nibos-lid@<setting>.service, which a
+# user may start when polkit allows it (wheel, on a nibOS image). hw/README.md, "Lid and power".
+set -eu
+conf=/etc/systemd/logind.conf.d/60-nibos-lid.conf
+
+apply() {
+    case "$1" in
+    sleep) rm -f "$conf" ;;
+    ignore)
+        mkdir -p "${conf%/*}"
+        printf '%s\n' "# nibos-hw: written by \`nib lid ignore\`; \`nib lid sleep\` removes it." \
+            '[Login]' 'HandleLidSwitch=ignore' 'HandleLidSwitchExternalPower=ignore' > "$conf"
+        ;;
+    esac
+    # logind reads its configuration again on SIGHUP.
+    systemctl kill --signal=HUP systemd-logind.service
+}
+
+case "${1:-status}" in
+status) if [ -f "$conf" ]; then echo ignore; else echo sleep; fi ;;
+sleep | ignore)
+    if [ "$(id -u)" = 0 ]; then apply "$1"; else systemctl start "nibos-lid@$1.service"; fi ;;
+apply) [ "$(id -u)" = 0 ] && apply "${2:?}" ;;
+*) echo "usage: nib lid [sleep|ignore]" >&2; exit 2 ;;
+esac

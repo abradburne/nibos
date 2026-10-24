@@ -1,0 +1,89 @@
+# portmaster: PortMaster (https://portmaster.games), the port manager for Linux handhelds, on
+# nibOS. The package carries none of PortMaster's own files: its release bundles some nibOS may
+# not redistribute (README.md, "Licences"). It carries nibOS's profile for it
+# (files/usr/lib/portmaster/nibos), the launchers, DSlot's entries, and portmaster-get, which
+# downloads the release pinned here when the user asks, checks its SHA-256 and unpacks it into
+# ~/.local/share/PortMaster, where PortMaster then updates itself.
+#
+# Built from the repository, as nibos-hw is: prepare() copies the sources in, Cargo's
+# dependencies are fetched at the versions Cargo.lock pins and the build runs offline. In the
+# build machine:
+#
+#   cd rootfs/portmaster && PKGDEST="$PWD/out" BUILDDIR="$HOME/makepkg-build" makepkg -f
+
+NIBOS_ROOT=$(cd "$startdir/../.." && pwd)
+
+pkgname=portmaster
+# The package's version is the PortMaster release it pins.
+pkgver=2026.10.21.0058
+pkgrel=7
+pkgdesc="PortMaster for nibOS: gets PortMaster when asked, runs its ports as the user on the top screen"
+url="https://github.com/PortsMaster/PortMaster-GUI"
+arch=(aarch64)
+# nibOS's own files (launchers, portmaster-get) GPL-3.0-or-later; the PortMaster profile files
+# MIT, as PortMaster's; nibkit (linked into portmaster-get) MIT, its font OFL-1.1.
+license=("GPL-3.0-or-later AND MIT AND OFL-1.1")
+# portmaster-get: SDL2, curl (the download), coreutils (sha256sum), libarchive (bsdtar).
+# PortMaster's own app: python and the SDL2 add-ons (pysdl2). openal, libtheora: the LÖVE
+# runtime it bundles (its splash, LÖVE ports). squashfuse: the runtimes ports mount (Godot,
+# .NET, ...), as the user.
+depends=(bash coreutils curl libarchive util-linux sdl2-compat python sdl2_ttf sdl2_image sdl2_mixer
+         openal libtheora squashfuse fuse3)
+makedepends=(cargo python)
+install=portmaster.install
+
+# The PortMaster release portmaster-get downloads: its version, address, size and SHA-256
+# (of PortMaster.zip as published; the release's .md5 agreed).
+_pmver=${pkgver%.*}-${pkgver##*.}
+_pmurl="https://github.com/PortsMaster/PortMaster-GUI/releases/download/$_pmver/PortMaster.zip"
+_pmsize=24364552
+_pmsha256=fb52b5c8b9289c6d63364d29769aadf8f584c64590d10d0ec02fedeebaa9b7e0
+
+prepare() {
+    rm -rf "$srcdir/files" "$srcdir/rootfs"
+    # The repository's layout, which the crate's test assumes: the files it reads at ../files.
+    # (nibkit comes from its repository, at the tag Cargo.toml names.)
+    mkdir -p "$srcdir/rootfs/portmaster/get"
+    cp -r "$startdir/files" "$srcdir/rootfs/portmaster/files"
+    cp -r "$startdir/get/Cargo.toml" "$startdir/get/Cargo.lock" "$startdir/get/src" \
+        "$startdir/get/.cargo" "$srcdir/rootfs/portmaster/get/"
+    cd "$srcdir/rootfs/portmaster/get"
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+}
+
+build() {
+    cd "$srcdir/rootfs/portmaster/get"
+    cargo build --release --frozen
+}
+
+check() {
+    cd "$srcdir/rootfs/portmaster/get"
+    cargo test --release --frozen
+    cd "$srcdir/rootfs/portmaster/files"
+    bash -n usr/bin/portmaster usr/lib/portmaster/run-port usr/lib/portmaster/env.sh \
+        usr/lib/portmaster/bin/mount usr/lib/portmaster/bin/umount \
+        usr/lib/portmaster/nibos/*.txt
+}
+
+package() {
+    cp -a "$srcdir/rootfs/portmaster/files/." "$pkgdir/"
+    chmod 755 "$pkgdir/usr/bin/portmaster" "$pkgdir/usr/lib/portmaster/run-port" \
+        "$pkgdir"/usr/lib/portmaster/bin/*
+    chmod 644 "$pkgdir/usr/lib/portmaster/env.sh" "$pkgdir"/usr/lib/portmaster/nibos/*
+    install -Dm755 "$srcdir/rootfs/portmaster/get/target/release/portmaster-get" \
+        "$pkgdir/usr/lib/portmaster/portmaster-get"
+    cat > "$pkgdir/usr/lib/portmaster/release.conf" <<EOF
+# portmaster: the PortMaster release nibOS pins, which portmaster-get downloads (PKGBUILD).
+PORTMASTER_VERSION=$_pmver
+PORTMASTER_URL=$_pmurl
+PORTMASTER_SIZE=$_pmsize
+PORTMASTER_SHA256=$_pmsha256
+EOF
+    install -Dm644 "$NIBOS_ROOT/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    # nibkit's licence and its fonts', from the copy Cargo fetched.
+    local nibkit
+    nibkit=$(cd "$srcdir/rootfs/portmaster/get" && cargo metadata --format-version 1 --frozen |
+        python3 -c 'import json, os, sys; print(next(os.path.dirname(p["manifest_path"]) for p in json.load(sys.stdin)["packages"] if p["name"] == "nibkit"))')
+    install -Dm644 "$nibkit/LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.nibkit"
+    install -Dm644 "$nibkit/assets/OFL.txt" "$pkgdir/usr/share/licenses/$pkgname/OFL.txt"
+}

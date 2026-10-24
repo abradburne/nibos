@@ -1,0 +1,20 @@
+# nibOS: the goodbye picture on the top screen at power-off and restart, once the boot UI (or
+# the console's login prompt) has let go of the screens, kept until the power goes
+# (/usr/lib/nibos/splash --goodbye; rootfs/splash). Not after a charge-sleep: that stays dark.
+#
+# At shutdown, units stop in the reverse of their start order: Before= the boot UI and the
+# console here means stopped after them. Nothing runs at boot (no ExecStart), so it costs the
+# boot nothing.
+[Unit]
+Description=The goodbye picture at power-off and restart
+DefaultDependencies=no
+Before=dslot.service getty@tty1.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStop=/usr/lib/nibos/splash --goodbye
+
+[Install]
+WantedBy=sysinit.target

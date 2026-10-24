@@ -1,0 +1,14 @@
+# nibos (rootfs/make-arch.sh): Wi-Fi networks dropped on the ROMS volume are
+# imported at every start. Not ordered before iwd, which would then wait ~1 s
+# for the ROMS mount: iwd watches its directory and picks networks up when they
+# arrive.
+[Unit]
+Description=Import Wi-Fi networks from the ROMS volume
+RequiresMountsFor=/mnt/roms
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/nibos/wifi-import
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+# nibOS: stands in for libfdk-aac, so nibOS's images and devices don't carry it.
+#
+# Arch's pipewire-audio depends on libfdk-aac for one plugin, the Bluetooth AAC codec
+# (libspa-codec-bluez5-aac.so). The Fraunhofer FDK AAC licence grants no patent rights and
+# restricts more than nibOS wants to pass on, so this package provides and conflicts with it,
+# and the system's pacman.conf keeps the AAC plugin from being unpacked (NoExtract, set by
+# rootfs/make-arch.sh; README.md here for a device set up otherwise). PipeWire loads each
+# Bluetooth codec as its own plugin: without this one, AAC headphones use SBC (or aptX, LDAC,
+# LC3, Opus where they have them). docs/engineering/audio.md, "Bluetooth headphones".
+#
+#   cd rootfs/no-fdk-aac && makepkg       (in the build machine; arch any)
+pkgname=nibos-no-fdk-aac
+pkgver=1
+pkgrel=1
+pkgdesc="nibOS: stands in for libfdk-aac (no Bluetooth AAC; SBC and the free codecs instead)"
+arch=(any)
+url="https://github.com/abradburne/nibos"
+license=(GPL-3.0-or-later)
+provides=(libfdk-aac libfdk-aac.so=2-64)
+conflicts=(libfdk-aac)
+source=(README.md)
+sha256sums=(SKIP)
+
+package() {
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

@@ -1,0 +1,25 @@
+[package]
+name = "nibos-template"
+version = "0.1.0"
+edition = "2021"
+description = "A nibOS app to start from: both screens, the gamepad, touch and sound, on SDL2"
+license = "MIT"
+
+[dependencies]
+# What a nibOS program needs to know about the device (nibkit, github.com/abradburne/nibkit): where the screens are, the
+# buttons' printed labels.
+nibkit = { git = "https://github.com/abradburne/nibkit", tag = "v0.1.0" }
+# SDL2's API, linked against the system's SDL2 (sdl2-compat on SDL3), as DSlot does. 0.38 or
+# later: 0.36 turned event types it doesn't know (sdl2-compat sends some) into undefined
+# behaviour.
+sdl2 = "0.38"
+
+[dev-dependencies]
+# For the test that checks app.toml the way DSlot reads it.
+nibkit = { git = "https://github.com/abradburne/nibkit", tag = "v0.1.0", features = ["dslot"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+panic = "abort"

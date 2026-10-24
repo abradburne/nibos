@@ -1,0 +1,110 @@
+#!/bin/busybox sh
+# nibos smoke test: the first thing our kernel runs on a real RG DS+.
+#
+# Built into the kernel as its initramfs, so it needs nothing from the card's
+# root file system. It shows what it finds on both screens (the kernel console),
+# saves a report to the TF1 card's ROMS partition in nibos-boot/, then powers
+# off. Nothing on the card is changed except that one folder.
+
+# No set -e: as PID 1 it has to get to the end (the report, the power-off)
+# whatever fails on the way.
+
+/bin/busybox --install -s /bin
+export PATH=/bin
+
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev
+mount -t debugfs debug /sys/kernel/debug 2>/dev/null
+
+say() { echo "$@"; echo "$@" > /dev/tty0 2>/dev/null; }
+
+say ""
+say "nibos smoke test - $(uname -r)"
+say "waiting for devices..."
+sleep 5
+
+# The report goes to TF1's ROMS volume (FAT).
+mkdir -p /mnt
+dev=$(findfs LABEL=ROMS 2>/dev/null)
+if [ -n "$dev" ] && mount -t vfat "$dev" /mnt; then
+    n=1
+    while [ -e "/mnt/nibos-boot/$n" ]; do n=$((n + 1)); done
+    R="/mnt/nibos-boot/$n"
+    mkdir -p "$R"
+    say "report: ROMS/nibos-boot/$n"
+else
+    R=/tmp/report
+    mkdir -p "$R"
+    say "ROMS volume not found (dev='$dev'): report kept in memory only"
+fi
+
+{
+    echo "== uname"; uname -a
+    echo "== cmdline"; cat /proc/cmdline
+    echo "== model"; cat /proc/device-tree/model; echo
+    echo "== meminfo"; head -5 /proc/meminfo
+    echo "== cpufreq"; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies 2>/dev/null
+    echo "== thermal"; cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null
+    echo "== drm"
+    for c in /sys/class/drm/card*-*; do
+        [ -f "$c/status" ] && echo "$(basename "$c"): $(cat "$c/status") $(cat "$c/enabled" 2>/dev/null) $(head -1 "$c/modes" 2>/dev/null)"
+    done
+    ls -la /dev/dri /dev/fb* 2>&1
+    echo "== backlight"
+    for b in /sys/class/backlight/*; do echo "$(basename "$b"): $(cat "$b/brightness")/$(cat "$b/max_brightness")"; done
+    echo "== input"; cat /proc/bus/input/devices
+    echo "== sound"; cat /proc/asound/cards 2>&1; ls /dev/snd 2>&1
+    echo "== net"; ls /sys/class/net; ls /sys/class/bluetooth 2>&1
+    echo "== block"; cat /proc/partitions
+    echo "== power"
+    for p in /sys/class/power_supply/*; do echo "[$(basename "$p")]"; cat "$p/uevent"; done
+    echo "== leds"; ls /sys/class/leds
+    echo "== i2c"
+    for d in /sys/bus/i2c/devices/*-*; do
+        echo "$(basename "$d") $(cat "$d/name") -> $(basename "$(readlink "$d/driver")" 2>/dev/null)"
+    done
+    echo "== deferred probes"; cat /sys/kernel/debug/devices_deferred 2>&1
+} > "$R/report.txt" 2>&1
+
+# The headline, on screen.
+say ""
+for c in /sys/class/drm/card*-DSI-*; do
+    [ -f "$c/status" ] && say "$(basename "$c"): $(cat "$c/status") $(head -1 "$c/modes" 2>/dev/null)"
+done
+say "touch/keys: $(grep -c '^I:' /proc/bus/input/devices) input devices"
+say "sound: $(grep -c ']:' /proc/asound/cards 2>/dev/null) cards   net: $(cd /sys/class/net && echo *)"
+say "battery: $(cat /sys/class/power_supply/*/capacity 2>/dev/null | head -1)%"
+say "deferred: $(wc -l < /sys/kernel/debug/devices_deferred 2>/dev/null)"
+
+# Input test: count events from each device while the owner presses things.
+say ""
+say "INPUT TEST (20 s): press every button, move both sticks,"
+say "touch the bottom screen, close and open the lid."
+mkdir -p /tmp/ev
+for e in /dev/input/event*; do
+    timeout 20 cat "$e" > "/tmp/ev/$(basename "$e")" &
+done
+sleep 21
+{
+    echo "== input test (events per device, 24 bytes each)"
+    for f in /tmp/ev/*; do
+        name=$(cat "/sys/class/input/$(basename "$f")/device/name" 2>/dev/null)
+        echo "$(basename "$f") ($name): $(( $(wc -c < "$f") / 24 ))"
+    done
+} >> "$R/report.txt"
+say "input events:"
+for f in /tmp/ev/*; do
+    name=$(cat "/sys/class/input/$(basename "$f")/device/name" 2>/dev/null)
+    say "  $name: $(( $(wc -c < "$f") / 24 ))"
+done
+
+dmesg > "$R/dmesg.txt"
+sync
+umount /mnt 2>/dev/null
+sync
+
+say ""
+say "Done. Powering off in 60 s."
+sleep 60
+poweroff -f

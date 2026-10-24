@@ -1,0 +1,2 @@
+# nibos-hw: the wheel group may switch the radios (nib wifi, DSlot's Wi-Fi switch) without root.
+KERNEL=="rfkill", SUBSYSTEM=="misc", GROUP="wheel", MODE="0664"

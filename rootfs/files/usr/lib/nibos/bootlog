@@ -1,0 +1,28 @@
+#!/bin/sh
+# nibos (rootfs/make-arch.sh): leave this start's kernel log and journal on the card's
+# ROMS/nibos/log/ (an image's NIBOS-DATA), readable on a computer when the device can't be
+# reached, so that a bug report can be "bring me the card". The last 10 starts are kept.
+#
+#   bootlog        20 s into the start (nibos-bootlog.service): a new boot-DATE.txt
+#   bootlog now    this start's file again, with everything up to now: at power-off and
+#                  restart (nibos-bootlog-shutdown.service), and when DSlot fails
+#                  (nibos-bootlog-now.service)
+dir=/mnt/roms/nibos/log
+mkdir -p "$dir" || exit 0
+current=/run/nibos/bootlog
+f=$(cat "$current" 2>/dev/null)
+case "${1:-boot}" in
+now) lines=5000 ;;
+*)
+    sleep 20
+    lines=500 ;;
+esac
+if [ -z "$f" ]; then
+    f=$dir/boot-$(date +%Y%m%d-%H%M%S).txt
+    mkdir -p /run/nibos && echo "$f" > "$current"
+fi
+{ echo "nibOS: $(date) (${1:-boot})"; uname -a; ip addr; dmesg; journalctl -b --no-pager | tail -n "$lines"; } > "$f.new" 2>&1
+mv -f "$f.new" "$f"
+# shellcheck disable=SC2012 # the names are this script's own, boot-DATE.txt
+ls -1t "$dir"/boot-*.txt | tail -n +11 | xargs -r rm -f
+sync

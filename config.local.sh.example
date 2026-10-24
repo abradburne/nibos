@@ -1,0 +1,10 @@
+# shellcheck shell=sh
+# Your own nibos settings: copy to config.local.sh (not in git) and edit.
+# Every name is explained in config.sh; set only what differs from it.
+
+: "${NIBOS_USER:=me}"
+: "${NIBOS_TIMEZONE:=Europe/London}"
+# : "${DEVICE:=me@192.168.1.20}"
+# : "${SSH_KEY:=$HOME/.ssh/id_ed25519}"
+# : "${BUILD_MACHINE:=rgbuild}"
+# : "${STOCK_IMAGE:=/path/to/RG-DS-PLUS-EN16GB-V1.0-20260915.IMG}"

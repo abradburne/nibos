@@ -1,0 +1,17 @@
+# nibos-hw: RG DS+ input, LED and wake-up rules.
+
+# The raw button and stick devices are grabbed by nibos-input and merged into
+# "Anbernic RG DS+ Gamepad"; keep games and libinput off the raw ones.
+SUBSYSTEM=="input", ATTRS{name}=="gpio-keys-control|adc-joystick", ENV{ID_INPUT_JOYSTICK}="", ENV{ID_INPUT_KEY}="", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+SUBSYSTEM=="input", ATTRS{name}=="Anbernic RG DS+ Gamepad", ENV{ID_INPUT_JOYSTICK}="1", TAG+="uaccess"
+
+# LEDs: green while running, amber while the charger is plugged in (charging or
+# full: "rk817-battery-charging" went dark at 100% on the charger), red unused.
+# Only on "add": setting a trigger sends a "change" event, so matching every
+# event re-applies the rule forever and the LEDs flicker.
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="green:power", ATTR{trigger}="default-on"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="amber:charging", ATTR{trigger}="rk817-charger-online"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="red:status", ATTR{trigger}="none", ATTR{brightness}="0"
+
+# Opening the lid and the power key wake the device from sleep.
+ACTION=="add", SUBSYSTEM=="input", ATTRS{name}=="gpio-keys-hall|rk805 pwrkey", ATTR{device/power/wakeup}="enabled"

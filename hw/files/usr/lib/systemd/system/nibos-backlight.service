@@ -1,0 +1,18 @@
+# nibos-hw: keep the backlights' levels at shutdown, so each screen comes back
+# at its own (the levels are set again at boot by udev and the splash;
+# /usr/bin/nibos-backlight). Enabled by the package.
+[Unit]
+Description=Keep the screens' brightness across restarts
+DefaultDependencies=no
+After=systemd-remount-fs.service
+Before=shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/usr/bin/nibos-backlight save
+
+[Install]
+WantedBy=sysinit.target

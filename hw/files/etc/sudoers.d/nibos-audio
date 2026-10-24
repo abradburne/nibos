@@ -1,0 +1,3 @@
+# nibos-hw: the wheel group may choose and import the speakers' tuning (nib audio) without a
+# password, so a settings screen (DSlot's System page) can offer it.
+%wheel ALL=(root) NOPASSWD: /usr/lib/nibos/nib-audio

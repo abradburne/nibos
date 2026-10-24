@@ -1,0 +1,15 @@
+[package]
+name = "nibos-safe-mode"
+version = "0.1.0"
+edition = "2021"
+description = "What nibOS shows when the boot UI keeps crashing: what failed, and a menu to restart it, the device, or open a console."
+license = "GPL-3.0-or-later"
+
+[dependencies]
+libc = "0.2"
+nibkit = { git = "https://github.com/abradburne/nibkit", tag = "v0.1.0", default-features = false, features = ["nibos", "menu-raster"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

@@ -1,0 +1,28 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# umount, for PortMaster's ports on nibOS: undoes what our mount made with squashfuse, named
+# by the mount point or by the .squashfs file; anything else goes to the real umount.
+
+list="${XDG_RUNTIME_DIR:-/tmp}/portmaster-mounts"
+name="${*: -1}"
+[ -e "$name" ] || exec /usr/bin/umount "$@"
+name="$(realpath "$name")"
+
+found=1
+if [ -f "$list" ]; then
+  while read -r source target; do
+    if [ "$name" = "$source" ] || [ "$name" = "$target" ]; then
+      found=0
+      mountpoint -q "$target" && fusermount3 -u "$target"
+    fi
+  done < "$list"
+  if [ "$found" = 0 ]; then
+    awk -v n="$name" '$1 != n && $2 != n' "$list" > "$list.new"
+    mv -f "$list.new" "$list"
+  fi
+fi
+
+if [ "$found" = 1 ]; then
+  [ -f "$name" ] && exit 1   # a squashfs that isn't mounted: as umount says, no harm
+  exec /usr/bin/umount "$@"
+fi

@@ -1,0 +1,23 @@
+#!/bin/sh
+# nib wifi: the Wi-Fi radio on or off, leaving Bluetooth as it is.
+#
+#   nib wifi on | off | status
+#
+# Off blocks the radio (rfkill): wlan0 goes down and iwd stops using it, with Bluetooth (the
+# same RTL8821CS, on its own UART) untouched; it saves as much as stopping the whole network
+# (464 to 371 mA idle, 2026-10-21). systemd keeps the setting across restarts. On unblocks it,
+# first starting the network if it isn't (`nib net up`, in the demand and deferred modes).
+# The wheel group may run it (/dev/rfkill, 72-nibos-rfkill.rules). `nib net` is how the system
+# starts both radios (its modes); this is the user's Wi-Fi switch. hw/README.md, "Network modes".
+set -eu
+case "${1:-status}" in
+on)
+    systemctl -q is-active nibos-network.target || /usr/lib/nibos/nib-net up
+    exec rfkill unblock wlan ;;
+off) exec rfkill block wlan ;;
+status)
+    if [ "$(rfkill list wlan -n -o SOFT 2>/dev/null | head -1)" = blocked ]; then echo off
+    elif [ -e /sys/class/net/wlan0 ]; then echo on
+    else echo "off (the network isn't up: nib net up)"; fi ;;
+*) echo "usage: nib wifi on|off|status" >&2; exit 2 ;;
+esac

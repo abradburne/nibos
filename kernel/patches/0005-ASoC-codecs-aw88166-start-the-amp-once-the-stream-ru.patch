@@ -1,0 +1,141 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Tue, 20 Oct 2026 11:10:00 +0900
+Subject: [PATCH] ASoC: codecs: aw88166: start the amp once the stream runs
+
+The amp locks its PLL to the I2S bit clock. The driver starts it from the
+DAPM PRE_PMU event, in a work queued with no delay, which can run before
+the CPU DAI has started the clocks. At boot this is hidden: the first try
+fails its PLL check, and the firmware update between tries takes long
+enough for a later one to succeed.
+
+At system resume it isn't. The DAPM widgets are powered up again before
+userspace restarts the suspended stream, and all five tries fail
+straight away ("check pll lock fail", "pll check failed cannot start").
+Nothing starts the amp later: the stream is restarted with the widget
+already powered, so there is no new PRE_PMU, and the speakers stay
+silent until the stream is closed for longer than the power-down delay.
+
+Seen on the Anbernic RG DS+ (two AW88166 on the RK3568's I2S3), on every
+suspend and resume.
+
+Start the amp again, if it isn't running, from the DAI's trigger: when
+the playback stream is started, resumed or released from pause, the
+codec DAI is triggered after the CPU DAI, with the clocks running. The
+trigger runs in atomic context, so queue a work that takes the lock and
+starts the amp, but only while the DAPM widget is still powered.
+
+Upstream status: candidate.
+---
+ sound/soc/codecs/aw88166.c | 50 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 50 insertions(+)
+
+diff --git a/sound/soc/codecs/aw88166.c b/sound/soc/codecs/aw88166.c
+--- a/sound/soc/codecs/aw88166.c
++++ b/sound/soc/codecs/aw88166.c
+@@ -23,6 +23,7 @@
+ 	struct mutex lock;
+ 	struct gpio_desc *reset_gpio;
+ 	struct delayed_work start_work;
++	struct work_struct trigger_work;
+ 	struct regmap *regmap;
+ 	struct aw_container *aw_cfg;
+ 
+@@ -32,6 +33,7 @@
+ 	unsigned int re_init_val;
+ 	unsigned int dither_st;
+ 	bool phase_sync;
++	bool playback_on;
+ };
+ 
+ static const struct regmap_config aw88166_remap_config = {
+@@ -1250,14 +1252,58 @@
+ 	}
+ 
+ 	aw_dev_pwd(aw_dev, true);
++
++	return 0;
++}
++
++static void aw88166_trigger_work(struct work_struct *work)
++{
++	struct aw88166 *aw88166 =
++		container_of(work, struct aw88166, trigger_work);
++
++	guard(mutex)(&aw88166->lock);
++	if (aw88166->playback_on)
++		aw88166_start(aw88166, AW88166_SYNC_START);
++}
++
++/*
++ * The amp locks its PLL to the I2S bit clock, which the CPU DAI only runs once
++ * the stream is triggered. The DAPM start can come before that, notably at
++ * system resume, where the widgets are powered up again before userspace
++ * restarts the stream: all its tries then fail and nothing starts the amp
++ * later. Start it again, if it isn't running, once the stream does.
++ */
++static int aw88166_trigger(struct snd_pcm_substream *substream, int cmd,
++			   struct snd_soc_dai *dai)
++{
++	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(dai->component);
++
++	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
++		return 0;
++
++	switch (cmd) {
++	case SNDRV_PCM_TRIGGER_START:
++	case SNDRV_PCM_TRIGGER_RESUME:
++	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
++		if (aw88166->aw_pa->status != AW88166_DEV_PW_ON)
++			queue_work(system_dfl_wq, &aw88166->trigger_work);
++		break;
++	default:
++		break;
++	}
+ 
+ 	return 0;
+ }
+ 
++static const struct snd_soc_dai_ops aw88166_dai_ops = {
++	.trigger = aw88166_trigger,
++};
++
+ static struct snd_soc_dai_driver aw88166_dai[] = {
+ 	{
+ 		.name = "aw88166-aif",
+ 		.id = 1,
++		.ops = &aw88166_dai_ops,
+ 		.playback = {
+ 			.stream_name = "Speaker_Playback",
+ 			.channels_min = 1,
+@@ -1637,9 +1683,11 @@
+ 	guard(mutex)(&aw88166->lock);
+ 	switch (event) {
+ 	case SND_SOC_DAPM_PRE_PMU:
++		aw88166->playback_on = true;
+ 		aw88166_start(aw88166, AW88166_ASYNC_START);
+ 		break;
+ 	case SND_SOC_DAPM_POST_PMD:
++		aw88166->playback_on = false;
+ 		aw88166_stop(aw88166->aw_pa);
+ 		break;
+ 	default:
+@@ -1672,6 +1720,7 @@
+ 	int ret;
+ 
+ 	INIT_DELAYED_WORK(&aw88166->start_work, aw88166_startup_work);
++	INIT_WORK(&aw88166->trigger_work, aw88166_trigger_work);
+ 
+ 	ret = aw88166_request_firmware_file(aw88166);
+ 	if (ret)
+@@ -1685,6 +1734,7 @@
+ 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(aw_codec);
+ 
+ 	cancel_delayed_work_sync(&aw88166->start_work);
++	cancel_work_sync(&aw88166->trigger_work);
+ }
+ 
+ static const struct snd_soc_component_driver soc_codec_dev_aw88166 = {
+-- 
+2.47.0
+

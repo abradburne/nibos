@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 14:31:05 +0900
+Subject: [PATCH 1/3] rockchip: rk3568: RG DS: hold A at power-on to boot the
+ fallback U-Boot
+
+Holding the A button (GPIO3_B7, active low; EAST in the DTS, Nintendo
+layout) at power-on makes SPL load U-Boot from sector 0x5000 instead of
+0x4000. nibOS keeps a known-good U-Boot there, so a U-Boot or kernel
+under test that hangs costs a restart rather than a trip to a card
+reader. The pin is read straight from the GPIO and GRF registers: GPIO3
+has no driver that early. Volume down was tried first, but holding it
+with power doesn't start the device.
+
+Upstream status: board-specific, not for upstream (nibOS's own
+recovery scheme).
+---
+ arch/arm/mach-rockchip/rk3568/rk3568.c | 37 ++++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/arch/arm/mach-rockchip/rk3568/rk3568.c b/arch/arm/mach-rockchip/rk3568/rk3568.c
+index 0a6607e5..c7e61cba 100644
+--- a/arch/arm/mach-rockchip/rk3568/rk3568.c
++++ b/arch/arm/mach-rockchip/rk3568/rk3568.c
+@@ -218,3 +218,40 @@ int checkboard(void)
+ 
+ 	return 0;
+ }
++
++#if IS_ENABLED(CONFIG_XPL_BUILD) && IS_ENABLED(CONFIG_TARGET_ANBERNIC_RG_DS_RK3568)
++#include <spl.h>
++#include <linux/delay.h>
++
++/*
++ * nibos escape hatch: holding the A button (GPIO3_B7, active low; EAST in
++ * the DTS, Nintendo layout) at power-on loads U-Boot from sector 0x5000, a
++ * known-good copy, instead of 0x4000, so a U-Boot under test that hangs
++ * costs a restart rather than a card swap. Not volume down: holding that with power didn't start the device.
++ * Read straight from the registers: GPIO3 has no driver this early.
++ */
++#define FALLBACK_SECTOR		0x5000
++#define GPIO3_BASE		0xfe760000
++#define GPIO_SWPORT_DDR_L	0x08
++#define GPIO_EXT_PORT		0x70
++#define GRF_GPIO3B_IOMUX_H	(GRF_BASE + 0x4c)
++#define GRF_GPIO3B_P		(GRF_BASE + 0xa4)
++#define HATCH_PIN		7	/* B7 */
++#define HATCH_BIT		(8 + HATCH_PIN)
++
++unsigned long board_spl_mmc_get_uboot_raw_sector(struct mmc *mmc,
++						 unsigned long raw_sect)
++{
++	/* GPIO function, pull-up, input */
++	writel(0xf << ((HATCH_PIN - 4) * 4 + 16), GRF_GPIO3B_IOMUX_H);
++	writel((3 << (HATCH_PIN * 2 + 16)) | (1 << (HATCH_PIN * 2)),
++	       GRF_GPIO3B_P);
++	writel(1 << (HATCH_BIT + 16), GPIO3_BASE + GPIO_SWPORT_DDR_L);
++	udelay(100);
++
++	if (!(readl(GPIO3_BASE + GPIO_EXT_PORT) & BIT(HATCH_BIT)))
++		return FALLBACK_SECTOR;
++
++	return raw_sect;
++}
++#endif
+
+base-commit: f07943d179dd44b3c741a7a9c0bddad5b144ec3b

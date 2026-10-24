@@ -1,0 +1,4 @@
+# portmaster: gptokeyb turns the gamepad into the keys a port expects through a virtual
+# keyboard, made with /dev/uinput. Let the input group (the user) have it, as it has the
+# input devices themselves; ports never run as root on nibOS.
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

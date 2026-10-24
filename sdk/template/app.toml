@@ -1,0 +1,8 @@
+# How DSlot shows this app on its Apps tab (optional: a nibOS app runs without DSlot too).
+# Installed as Roms/APPS/nibos-template/app.toml with the program and icon.png beside it, by
+# `sdk/run.sh --install`. Format: DSlot's docs/emulators.md, "Apps".
+name = "Template"
+description = "Both screens, the gamepad, touch and sound"
+command = ["./nibos-template"]
+icon = "icon.png"
+runs_on = ["nibos"]

@@ -1,0 +1,28 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# portmaster: PortMaster's own app on nibOS, to browse and install ports over Wi-Fi. The first
+# time, it gets PortMaster (portmaster-get: asks, downloads the release nibOS pins, checks it);
+# then PortMaster runs on the top screen with the device's controls and installs ports into
+# Roms/PORTS on a card, which DSlot lists. `portmaster --sync` only puts nibOS's files in place.
+set -u
+
+# shellcheck source=../lib/portmaster/env.sh
+source /usr/lib/portmaster/env.sh
+[ "${1:-}" = "--sync" ] && { portmaster_sync; exit; }
+
+## The user said no, or it failed: back to DSlot.
+portmaster_get || exit 0
+portmaster_sync || exit 1
+
+## PortMaster's own app takes seconds to start. nibOS's splash keeps "Starting PortMaster..."
+## on the screens over the handover (it lets go of them, so PortMaster gets them when it opens
+## them) until PortMaster's window replaces it, and keeps the picture's buffers while this
+## process (run-port, after the exec below) runs: PortMaster's SDL puts them back as it quits,
+## and DSlot then replaces them, with no dark frame between.
+starting="${XDG_RUNTIME_DIR:-/tmp}/portmaster-starting.pspl"
+if [ -x /usr/lib/nibos/splash ] && "$PORTMASTER_LIB/portmaster-get" --picture "$starting"; then
+  setsid /usr/lib/nibos/splash --hold "$starting" 30 --while $$ < /dev/null > /dev/null 2>&1 &
+fi
+
+## PortMaster's launcher is started as a port is: its own process group, SIGTERM to all of it.
+exec /usr/lib/portmaster/run-port "$controlfolder/nibos/PortMaster.txt"

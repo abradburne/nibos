@@ -1,0 +1,28 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# mount, for PortMaster's ports on nibOS. Ports that need a runtime (Godot, .NET, GameMaker...)
+# mount PortMaster's .squashfs of it with `$ESUDO mount <file>.squashfs <dir>`; ports run as the
+# user here, so the squashfs is mounted with squashfuse (FUSE) instead. Anything else goes to
+# the real mount. Mounts made here are listed in $XDG_RUNTIME_DIR/portmaster-mounts, for
+# umount and for run-port, which unmounts them when the port ends.
+
+source=""
+target=""
+for arg in "$@"; do
+  case "$arg" in
+    -*) ;;
+    *) if [ -z "$source" ]; then source="$arg"; elif [ -z "$target" ]; then target="$arg"; fi ;;
+  esac
+done
+
+case "$source" in
+  *.squashfs) [ -f "$source" ] && [ -n "$target" ] || exec /usr/bin/mount "$@" ;;
+  *) exec /usr/bin/mount "$@" ;;
+esac
+
+mkdir -p "$target" || exit 32
+if mountpoint -q "$target"; then
+  fusermount3 -u "$target" 2>/dev/null
+fi
+squashfuse "$source" "$target" || exit 32
+echo "$(realpath "$source") $(realpath "$target")" >> "${XDG_RUNTIME_DIR:-/tmp}/portmaster-mounts"

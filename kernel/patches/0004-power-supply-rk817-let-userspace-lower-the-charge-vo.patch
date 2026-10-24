@@ -1,0 +1,197 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Mon, 19 Oct 2026 17:10:00 +0900
+Subject: [PATCH] power: supply: rk817: let userspace lower the charge voltage
+
+A handheld left on its charger keeps its battery full, which ages it
+fastest. The RK817 can't stop at a state of charge, but its charge voltage
+can be set from 4.1V up: charged to 4.1V, a cell stops well short of full,
+and the charger restarts on its own once the cell falls below its recharge
+threshold, as at the full voltage.
+
+Make rk817-battery's constant_charge_voltage (the voltage the PMIC is set
+to) writable, from 4.1V up to the battery's constant-charge-voltage-max,
+which constant_charge_voltage_max now reports (at probe the two are the
+same, as before). It is set again whenever the cord is plugged in or out.
+
+The battery stays connected throughout, as at a full charge; charging
+isn't turned off (CHRG_EN), which on the RK817 also cuts the battery off
+from the system, so that unplugging the charger then powers it off.
+
+A charge that finishes at a lower voltage isn't a full battery: don't
+reset the state of charge to 100% and the coulomb counter to the full
+capacity then, and report the status as not charging rather than full.
+
+Upstream status: candidate.
+---
+ drivers/power/supply/rk817_charger.c | 69 +++++++++++++++++++++++++---
+ 1 file changed, 62 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/power/supply/rk817_charger.c b/drivers/power/supply/rk817_charger.c
+index 5558b18..81c0123 100644
+--- a/drivers/power/supply/rk817_charger.c
++++ b/drivers/power/supply/rk817_charger.c
+@@ -95,6 +95,15 @@ struct rk817_charger {
+ 	int bat_voltage_min_design_uv;
+ 	int bat_voltage_max_design_uv;
+ 
++	/*
++	 * The charge voltage: the battery's constant-charge-voltage-max (within
++	 * the PMIC's 4.45v) is the ceiling, and userspace may set it lower, to
++	 * stop charging short of full and spare the battery. The PMIC is set
++	 * to it again whenever the cord is plugged in or out.
++	 */
++	int chg_volt_ceiling_uv;
++	int chg_volt_uv;
++
+ 	/* Values updated periodically by driver for display. */
+ 	int charge_now_uah;
+ 	int volt_avg_uv;
+@@ -167,6 +176,23 @@ static int rk817_chg_cur_from_reg(u8 reg)
+ 	}
+ }
+ 
++/*
++ * Set (or set again) the charge voltage asked for: 4.1v to 4.45v in steps of
++ * 50mv are 0x00 to 0x07; a voltage between steps is rounded down.
++ */
++static int rk817_set_chg_volt(struct rk817_charger *charger)
++{
++	return regmap_write_bits(charger->rk808->regmap, RK817_PMIC_CHRG_OUT,
++				 RK817_CHRG_VOL_SEL,
++				 ((charger->chg_volt_uv - 4100000) / 50000) << 4);
++}
++
++/* Whether a finished charge is a full battery, not a stop below full. */
++static bool rk817_charges_to_full(struct rk817_charger *charger)
++{
++	return charger->max_chg_volt_uv >= charger->chg_volt_ceiling_uv;
++}
++
+ static void rk817_bat_calib_vol(struct rk817_charger *charger)
+ {
+ 	uint32_t vcalib0 = 0;
+@@ -266,9 +292,13 @@ static int rk817_bat_calib_cap(struct rk817_charger *charger)
+ 		return -EINVAL;
+ 	}
+ 
+-	/* Calibrate the soc and fcc on a fully charged battery */
++	/*
++	 * Calibrate the soc and fcc on a fully charged battery: not on a charge
++	 * that stopped at a lower charge voltage, short of full.
++	 */
+ 
+-	if (charger->charge_status == CHARGE_FINISH && (!charger->soc_cal)) {
++	if (charger->charge_status == CHARGE_FINISH && (!charger->soc_cal) &&
++	    rk817_charges_to_full(charger)) {
+ 		/*
+ 		 * soc should be 100000 and columb counter should show the full
+ 		 * charge capacity. Note that if the device is unplugged for a
+@@ -297,7 +327,8 @@ static int rk817_bat_calib_cap(struct rk817_charger *charger)
+ 	 * The columb counter can drift up slightly, so we should correct for
+ 	 * it. But don't correct it until we're at 100% soc.
+ 	 */
+-	if (charger->charge_status == CHARGE_FINISH && charger->soc_cal) {
++	if (charger->charge_status == CHARGE_FINISH && charger->soc_cal &&
++	    rk817_charges_to_full(charger)) {
+ 		regmap_bulk_read(rk808->regmap, RK817_GAS_GAUGE_Q_PRES_H3,
+ 				 bulk_reg, 4);
+ 		charge_now_adc = get_unaligned_be32(bulk_reg);
+@@ -464,7 +495,9 @@ static int rk817_bat_get_prop(struct power_supply *ps,
+ 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+ 			break;
+ 		case CHARGE_FINISH:
+-			val->intval = POWER_SUPPLY_STATUS_FULL;
++			val->intval = rk817_charges_to_full(charger) ?
++				POWER_SUPPLY_STATUS_FULL :
++				POWER_SUPPLY_STATUS_NOT_CHARGING;
+ 			break;
+ 		default:
+ 			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
+@@ -522,9 +555,12 @@ static int rk817_bat_get_prop(struct power_supply *ps,
+ 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+ 		val->intval = charger->max_chg_cur_ua;
+ 		break;
+-	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
+ 		val->intval = charger->max_chg_volt_uv;
+ 		break;
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
++		val->intval = charger->chg_volt_ceiling_uv;
++		break;
+ 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+ 		val->intval = charger->bat_voltage_max_design_uv;
+ 		break;
+@@ -576,6 +612,7 @@ static irqreturn_t rk817_plug_in_isr(int irq, void *cg)
+ 
+ 	charger = (struct rk817_charger *)cg;
+ 	charger->plugged_in = 1;
++	rk817_set_chg_volt(charger);
+ 	power_supply_changed(charger->chg_ps);
+ 	power_supply_changed(charger->bat_ps);
+ 	/* try to recalibrate capacity if we hit full charge. */
+@@ -602,9 +639,11 @@ static irqreturn_t rk817_plug_out_isr(int irq, void *cg)
+ 	/*
+ 	 * For some reason the bits of RK817_PMIC_CHRG_IN reset whenever the
+ 	 * power cord is unplugged. This was not documented in the BSP kernel
+-	 * or the datasheet and only discovered by trial and error. Set minimum
+-	 * USB input voltage to 4.5v and enable USB voltage input limit.
++	 * or the datasheet and only discovered by trial and error. Set the
++	 * charge voltage again, in case; then set minimum USB input voltage to
++	 * 4.5v and enable USB voltage input limit.
+ 	 */
++	rk817_set_chg_volt(charger);
+ 	regmap_write_bits(rk808->regmap, RK817_PMIC_CHRG_IN,
+ 			  RK817_USB_VLIM_SEL, (0x05 << 4));
+ 	regmap_write_bits(rk808->regmap, RK817_PMIC_CHRG_IN, RK817_USB_VLIM_EN,
+@@ -631,6 +670,7 @@ static int rk817_bat_set_prop(struct power_supply *ps,
+ 			      const union power_supply_propval *val)
+ {
+ 	struct rk817_charger *charger = power_supply_get_drvdata(ps);
++	int ret;
+ 
+ 	switch (prop) {
+ 	case POWER_SUPPLY_PROP_CHARGE_FULL:
+@@ -639,6 +679,16 @@ static int rk817_bat_set_prop(struct power_supply *ps,
+ 			return -EINVAL;
+ 		charger->fcc_mah = val->intval / 1000;
+ 		return rk817_bat_calib_cap(charger);
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
++		if (val->intval < 4100000 ||
++		    val->intval > charger->chg_volt_ceiling_uv)
++			return -EINVAL;
++		charger->chg_volt_uv = val->intval;
++		ret = rk817_set_chg_volt(charger);
++		if (ret)
++			return ret;
++		mod_delayed_work(system_percpu_wq, &charger->work, 0);
++		return 0;
+ 	default:
+ 		return -EINVAL;
+ 	}
+@@ -652,6 +702,7 @@ static enum power_supply_property rk817_bat_props[] = {
+ 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+ 	POWER_SUPPLY_PROP_CHARGE_EMPTY_DESIGN,
+ 	POWER_SUPPLY_PROP_CHARGE_NOW,
++	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
+ 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX,
+ 	POWER_SUPPLY_PROP_VOLTAGE_AVG,
+ 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+@@ -674,6 +725,7 @@ static int rk817_bat_prop_writeable(struct power_supply *psy,
+ {
+ 	switch (psp) {
+ 	case POWER_SUPPLY_PROP_CHARGE_FULL:
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
+ 		return 1;
+ 	default:
+ 		return 0;
+@@ -957,6 +1009,9 @@ static int rk817_battery_init(struct rk817_charger *charger,
+ 
+ 	max_chg_cur_reg = rk817_chg_cur_to_reg(max_chg_cur_ma);
+ 
++	charger->chg_volt_ceiling_uv = (4100 + max_chg_vol_reg * 50) * 1000;
++	charger->chg_volt_uv = charger->chg_volt_ceiling_uv;
++
+ 	if (max_chg_vol_reg < 0 || max_chg_vol_reg > 7) {
+ 		return dev_err_probe(charger->dev, -EINVAL,
+ 		       "invalid max charger voltage, value %u unsupported\n",

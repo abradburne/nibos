@@ -1,0 +1,628 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 12:52:02 +0900
+Subject: [PATCH 3/4] mmc: rockchip_dw_mmc: UHS SDR104 for the RK3568 SD card
+
+U-Boot read the RG DS+ card at High Speed, 50 MHz at 3.3 V: 0.33 s for a
+7.57 MB kernel. Linux already runs the same card at UHS SDR104 (150 MHz,
+1.8 V). Teach U-Boot to do the same; the kernel then loads in 107 ms.
+
+- The Rockchip dw_mmc glue offers SDR104 (and SDR25/SDR12) when the DT
+  says sd-uhs-sdr104, vqmmc feeds a Rockchip IO domain and the CRU phase
+  registers are known (RK3568 only here). Anything missing leaves High
+  Speed. SDR50 isn't offered: 100 MHz needs a 200 MHz CRU clock, which
+  the SD clock mux can't make.
+- The IO domain follows vqmmc in the safe order, as Linux's io-domain
+  notifiers do: 3.3 V pads before vqmmc rises, 1.8 V pads only after it
+  falls. rockchip-io-domain.c gains rockchip_iodomain_set_voltage() for
+  it, probing the domain on first use (SPL doesn't probe probe-after-bind
+  devices).
+- Drive (90 degrees, 180 at SDR104) and sample phases are written to the
+  CRU's SDMMC0_CON0/1, as Linux's clk-mmc-phase.c does; U-Boot's clock
+  drivers have no phase support. SDR104 tunes the sample phase over 36
+  steps of 10 degrees and takes the middle of the longest good run.
+- dw_mmc core: the clock is really gated during the voltage switch
+  (set_ios ignored clk_disable), no automatic clock stop while
+  switching, the UHS_REG 1.8 V bit, the card read threshold at SDR104,
+  and a data error no longer waits 1 s for the IDMAC (tuning fails many
+  reads on purpose).
+- A card switched to 1.8 V only goes back to 3.3 V when its power is
+  cut, which the boot command's High Speed retry (mmc dev 1 0 0) needs:
+  the glue cuts the always-on vcc3v3_sd, past the regulator's always-on
+  check and enable count, only in that case. Tested with a forced
+  retry: power off 28 ms, card back at legacy 25 MHz, kernel boots.
+
+Upstream status: candidate, as a series to split (io-domain API, dw_mmc
+core fixes, Rockchip phases and tuning, the power-cycle retry).
+---
+ drivers/misc/rockchip-io-domain.c |  47 ++++++
+ drivers/mmc/dw_mmc.c              |  72 ++++++++--
+ drivers/mmc/mmc.c                 |   5 +
+ drivers/mmc/rockchip_dw_mmc.c     | 229 +++++++++++++++++++++++++++++-
+ include/dwmmc.h                   |   6 +
+ include/rockchip-io-domain.h      |  27 ++++
+ 6 files changed, 376 insertions(+), 10 deletions(-)
+ create mode 100644 include/rockchip-io-domain.h
+
+diff --git a/drivers/misc/rockchip-io-domain.c b/drivers/misc/rockchip-io-domain.c
+index a0573c52..af346ebf 100644
+--- a/drivers/misc/rockchip-io-domain.c
++++ b/drivers/misc/rockchip-io-domain.c
+@@ -7,7 +7,10 @@
+ 
+ #include <dm.h>
+ #include <dm/device_compat.h>
++#include <dm/device-internal.h>
++#include <dm/uclass-internal.h>
+ #include <regmap.h>
++#include <rockchip-io-domain.h>
+ #include <syscon.h>
+ #include <power/regulator.h>
+ 
+@@ -93,6 +96,11 @@ static int rk3568_iodomain_write(struct regmap *grf, uint offset, int idx, int u
+ 	return 0;
+ }
+ 
++struct rockchip_iodomain_priv {
++	const struct rockchip_iodomain_soc_data *soc_data;
++	struct regmap *grf;
++};
++
+ static int rockchip_iodomain_write(struct regmap *grf, uint offset, int idx, int uV)
+ {
+ 	u32 val;
+@@ -331,9 +339,13 @@ static int rockchip_iodomain_probe(struct udevice *dev)
+ 	struct regmap *grf;
+ 	int ret;
+ 
++	struct rockchip_iodomain_priv *priv = dev_get_priv(dev);
++
+ 	grf = syscon_get_regmap(dev_get_parent(dev));
+ 	if (IS_ERR(grf))
+ 		return PTR_ERR(grf);
++	priv->soc_data = soc_data;
++	priv->grf = grf;
+ 
+ 	for (int i = 0; i < MAX_SUPPLIES; i++) {
+ 		const char *supply_name = soc_data->supply_names[i];
+@@ -379,4 +391,39 @@ U_BOOT_DRIVER(rockchip_iodomain) = {
+ 	.of_match = rockchip_iodomain_ids,
+ 	.bind = rockchip_iodomain_bind,
+ 	.probe = rockchip_iodomain_probe,
++	.priv_auto = sizeof(struct rockchip_iodomain_priv),
+ };
++
++int rockchip_iodomain_set_voltage(struct udevice *supply, int uV)
++{
++	struct udevice *dev;
++	struct uclass *uc;
++
++	uclass_id_foreach_dev(UCLASS_NOP, dev, uc) {
++		struct rockchip_iodomain_priv *priv;
++
++		/* SPL doesn't probe the probe-after-bind devices itself */
++		if (dev->driver != DM_DRIVER_GET(rockchip_iodomain) ||
++		    device_probe(dev))
++			continue;
++		priv = dev_get_priv(dev);
++		for (int i = 0; i < MAX_SUPPLIES; i++) {
++			const char *supply_name = priv->soc_data->supply_names[i];
++			struct udevice *reg;
++
++			if (!supply_name ||
++			    device_get_supply_regulator(dev, supply_name, &reg) ||
++			    reg != supply)
++				continue;
++			if (uV > MAX_VOLTAGE_3_3)
++				return -EINVAL;
++			dev_dbg(dev, "%s: %d uV\n", supply_name, uV);
++
++			return priv->soc_data->write(priv->grf,
++						     priv->soc_data->grf_offset,
++						     i, uV);
++		}
++	}
++
++	return -ENODEV;
++}
+diff --git a/drivers/mmc/dw_mmc.c b/drivers/mmc/dw_mmc.c
+index c2424d78..8ef2defc 100644
+--- a/drivers/mmc/dw_mmc.c
++++ b/drivers/mmc/dw_mmc.c
+@@ -306,7 +306,7 @@ static int dwmci_data_transfer(struct dwmci_host *host, struct mmc_data *data)
+ }
+ 
+ static int dwmci_dma_transfer(struct dwmci_host *host, uint flags,
+-			      struct bounce_buffer *bbstate)
++			      struct bounce_buffer *bbstate, int data_err)
+ {
+ 	int ret;
+ 	u32 mask, ctrl;
+@@ -316,10 +316,20 @@ static int dwmci_dma_transfer(struct dwmci_host *host, uint flags,
+ 	else
+ 		mask = DWMCI_IDINTEN_TI;
+ 
++	/*
++	 * After a data error the IDMAC may never finish: don't wait a second
++	 * for it (tuning sends many commands that fail), reset it instead.
++	 */
+ 	ret = wait_for_bit_le32(host->ioaddr + host->regs->idsts, mask, true,
+-				1000, false);
++				data_err ? 1 : 1000, false);
+ 	if (ret)
+ 		debug("%s: DWMCI_IDINTEN mask 0x%x timeout\n", __func__, mask);
++	if (ret || data_err) {
++		dwmci_writel(host, DWMCI_BMOD, dwmci_readl(host, DWMCI_BMOD) |
++			     DWMCI_BMOD_IDMAC_RESET);
++		dwmci_wait_reset(host, DWMCI_CTRL_FIFO_RESET |
++				 DWMCI_CTRL_DMA_RESET);
++	}
+ 
+ 	/* Clear interrupts */
+ 	dwmci_writel(host, host->regs->idsts, DWMCI_IDINTEN_MASK);
+@@ -420,8 +430,23 @@ static int dwmci_send_cmd_common(struct dwmci_host *host, struct mmc_cmd *cmd,
+ 		flags |= DWMCI_CMD_CHECK_CRC;
+ 
+ 	host->volt_switching = (cmd->cmdidx == SD_CMD_SWITCH_UHS18V);
+-	if (host->volt_switching)
++	if (host->volt_switching) {
+ 		flags |= DWMCI_CMD_VOLT_SWITCH;
++		/*
++		 * No automatic clock stop while switching to 1.8 V: stopping
++		 * the clock is a step of the switch itself (as Linux does).
++		 * Setting a clock turns low-power mode back on.
++		 */
++		dwmci_writel(host, DWMCI_CLKENA, dwmci_readl(host, DWMCI_CLKENA) &
++			     ~DWMCI_CLKEN_LOW_PWR);
++		dwmci_writel(host, DWMCI_CMD, DWMCI_CMD_START |
++			     DWMCI_CMD_UPD_CLK | DWMCI_CMD_PRV_DAT_WAIT);
++		for (i = 0; i < retry; i++) {
++			if (dwmci_readl(host, DWMCI_RINTSTS) & DWMCI_INTMSK_CDONE)
++				break;
++		}
++		dwmci_writel(host, DWMCI_RINTSTS, DWMCI_INTMSK_ALL);
++	}
+ 
+ 	flags |= cmd->cmdidx | DWMCI_CMD_START | DWMCI_CMD_USE_HOLD_REG;
+ 
+@@ -480,8 +505,14 @@ static int dwmci_send_cmd_common(struct dwmci_host *host, struct mmc_cmd *cmd,
+ 
+ 	if (data) {
+ 		ret = dwmci_data_transfer(host, data);
+-		if (!host->fifo_mode)
+-			ret = dwmci_dma_transfer(host, data->flags, &bbstate);
++		if (!host->fifo_mode) {
++			int dma_ret = dwmci_dma_transfer(host, data->flags,
++							 &bbstate, ret);
++
++			/* a CRC error is the answer, not the DMA's status */
++			if (!ret)
++				ret = dma_ret;
++		}
+ 	}
+ 
+ 	udelay(100);
+@@ -490,7 +521,7 @@ static int dwmci_send_cmd_common(struct dwmci_host *host, struct mmc_cmd *cmd,
+ }
+ 
+ #ifdef CONFIG_DM_MMC
+-static int dwmci_send_cmd(struct udevice *dev, struct mmc_cmd *cmd,
++int dwmci_send_cmd(struct udevice *dev, struct mmc_cmd *cmd,
+ 			  struct mmc_data *data)
+ {
+ 	struct mmc *mmc = mmc_get_mmc_dev(dev);
+@@ -513,7 +544,9 @@ static int dwmci_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
+ 
+ static int dwmci_control_clken(struct dwmci_host *host, bool on)
+ {
+-	const u32 val = on ? DWMCI_CLKEN_ENABLE | DWMCI_CLKEN_LOW_PWR : 0;
++	/* the card needs a running clock to finish a switch to 1.8 V */
++	const u32 val = on ? DWMCI_CLKEN_ENABLE |
++		(host->volt_switching ? 0 : DWMCI_CLKEN_LOW_PWR) : 0;
+ 	const u32 cmd_only_clk = DWMCI_CMD_PRV_DAT_WAIT | DWMCI_CMD_UPD_CLK;
+ 	int i, timeout = 10000;
+ 	u32 flags, mask;
+@@ -597,7 +630,7 @@ static int dwmci_setup_bus(struct dwmci_host *host, u32 freq)
+ }
+ 
+ #ifdef CONFIG_DM_MMC
+-static int dwmci_set_ios(struct udevice *dev)
++int dwmci_set_ios(struct udevice *dev)
+ {
+ 	struct mmc *mmc = mmc_get_mmc_dev(dev);
+ #else
+@@ -609,7 +642,11 @@ static int dwmci_set_ios(struct mmc *mmc)
+ 
+ 	debug("Bus width = %d, clock: %d\n", mmc->bus_width, mmc->clock);
+ 
+-	dwmci_setup_bus(host, mmc->clock);
++	/* The UHS voltage switch gates the clock for a while */
++	if (mmc->clk_disable)
++		dwmci_control_clken(host, false);
++	else
++		dwmci_setup_bus(host, mmc->clock);
+ 	switch (mmc->bus_width) {
+ 	case 8:
+ 		ctype = DWMCI_CTYPE_8BIT;
+@@ -629,9 +666,26 @@ static int dwmci_set_ios(struct mmc *mmc)
+ 		regs |= DWMCI_DDR_MODE;
+ 	else
+ 		regs &= ~DWMCI_DDR_MODE;
++	if (mmc->signal_voltage == MMC_SIGNAL_VOLTAGE_180)
++		regs |= DWMCI_UHS_18V;
++	else
++		regs &= ~DWMCI_UHS_18V;
+ 
+ 	dwmci_writel(host, DWMCI_UHS_REG, regs);
+ 
++	/*
++	 * At SDR104/HS200 start reading a block only once the FIFO has room
++	 * for all of it, so the controller never stops the card's clock in
++	 * the middle of one (Linux's dw_mci_ctrl_thld()).
++	 */
++	if ((mmc->selected_mode == UHS_SDR104 ||
++	     mmc->selected_mode == MMC_HS_200) &&
++	    host->fifo_depth * 4 >= MMC_MAX_BLOCK_LEN)
++		dwmci_writel(host, DWMCI_CDTHRCTL,
++			     MMC_MAX_BLOCK_LEN << 16 | DWMCI_CDTHRCTL_RD_EN);
++	else if (dwmci_readl(host, DWMCI_CDTHRCTL))
++		dwmci_writel(host, DWMCI_CDTHRCTL, 0);
++
+ 	if (host->clksel) {
+ 		int ret;
+ 
+diff --git a/drivers/mmc/mmc.c b/drivers/mmc/mmc.c
+index 670e92ee..6f8d1838 100644
+--- a/drivers/mmc/mmc.c
++++ b/drivers/mmc/mmc.c
+@@ -2969,6 +2969,11 @@ int mmc_get_op_cond(struct mmc *mmc, bool quiet)
+ 	if (mmc->has_init)
+ 		return 0;
+ 
++	/* a non-UHS mode asked for with "mmc dev" stays at 3.3 V signalling */
++	if (mmc->user_speed_mode != MMC_MODES_END &&
++	    !(MMC_CAP(mmc->user_speed_mode) & UHS_CAPS))
++		uhs_en = false;
++
+ 	err = mmc_power_init(mmc);
+ 	if (err)
+ 		return err;
+diff --git a/drivers/mmc/rockchip_dw_mmc.c b/drivers/mmc/rockchip_dw_mmc.c
+index 7a72abaa..bd799b73 100644
+--- a/drivers/mmc/rockchip_dw_mmc.c
++++ b/drivers/mmc/rockchip_dw_mmc.c
+@@ -5,18 +5,22 @@
+ 
+ #include <clk.h>
+ #include <dm.h>
++#include <dm/device_compat.h>
+ #include <dt-structs.h>
+ #include <dwmmc.h>
+ #include <errno.h>
+ #include <log.h>
+ #include <mapmem.h>
+ #include <pwrseq.h>
++#include <rockchip-io-domain.h>
+ #include <syscon.h>
+ #include <asm/gpio.h>
+ #include <asm/arch-rockchip/clock.h>
+ #include <asm/arch-rockchip/periph.h>
++#include <dt-bindings/clock/rk3568-cru.h>
+ #include <linux/delay.h>
+ #include <linux/err.h>
++#include <power/regulator.h>
+ 
+ struct rockchip_mmc_plat {
+ #if CONFIG_IS_ENABLED(OF_PLATDATA)
+@@ -32,8 +36,229 @@ struct rockchip_dwmmc_priv {
+ 	int fifo_depth;
+ 	bool fifo_mode;
+ 	u32 minmax[2];
++	/* UHS: the IO domain vqmmc feeds follows its voltage */
++	struct udevice *vqmmc;
++	bool io_1v8;
++	struct udevice *vmmc;
++	/* CRU drive phase register, the sample phase is next to it */
++	void __iomem *phase_reg;
++	int sample_phase;	/* degrees, from tuning; -1 if not tuned */
+ };
+ 
++#define ROCKCHIP_MMC_DELAY_SEL		BIT(10)
++#define ROCKCHIP_MMC_DELAYNUM_OFFSET	2
++/* a fine delay element is 44-77 ps; Linux takes 60 */
++#define ROCKCHIP_MMC_DELAY_ELEMENT_PSEC	60
++#define ROCKCHIP_MMC_TUNING_STEPS	36	/* 10 degrees apart */
++
++/*
++ * Set a drive or sample phase of the card clock: 90 degree steps plus up to
++ * 255 fine delay elements (Linux's clk-mmc-phase.c). U-Boot's clock drivers
++ * have no phase support.
++ */
++static void rockchip_dwmmc_set_phase(void __iomem *reg, uint rate, int degrees)
++{
++	u32 delay = 10000000 * (degrees % 90);	/* PSECS_PER_SEC / 10000 / 10 */
++	u32 raw;
++
++	delay = DIV_ROUND_CLOSEST(delay, (rate / 1000) * 36 *
++				  (ROCKCHIP_MMC_DELAY_ELEMENT_PSEC / 10));
++	delay = min(delay, 255U);
++	raw = (delay ? ROCKCHIP_MMC_DELAY_SEL : 0) |
++	      delay << ROCKCHIP_MMC_DELAYNUM_OFFSET | (degrees / 90);
++	writel(raw << 1 | 0x7ff << 17, reg);
++}
++
++static void rockchip_dwmmc_set_phases(struct rockchip_dwmmc_priv *priv,
++				      struct mmc *mmc)
++{
++	bool sdr104 = mmc->selected_mode == UHS_SDR104;
++
++	if (!priv->phase_reg || mmc->clk_disable || !mmc->clock)
++		return;
++	/*
++	 * Hold times as Linux sets them: 90 degrees, 180 at SDR104. The
++	 * sample phase is the tuned one at SDR104, 0 otherwise.
++	 */
++	rockchip_dwmmc_set_phase(priv->phase_reg, mmc->clock, sdr104 ? 180 : 90);
++	rockchip_dwmmc_set_phase(priv->phase_reg + 4, mmc->clock,
++				 sdr104 && priv->sample_phase >= 0 ?
++				 priv->sample_phase : 0);
++}
++
++static int rockchip_dwmmc_set_ios(struct udevice *dev)
++{
++	struct rockchip_dwmmc_priv *priv = dev_get_priv(dev);
++	struct mmc *mmc = mmc_get_mmc_dev(dev);
++	bool v18 = mmc->signal_voltage == MMC_SIGNAL_VOLTAGE_180;
++	int ret;
++
++	/*
++	 * The pads' IO domain must never be at 1.8 V while vqmmc is at 3.3 V:
++	 * switch it to 3.3 V before raising vqmmc, to 1.8 V after lowering
++	 * it (as Linux's io-domain driver does from regulator notifiers).
++	 */
++	if (priv->vqmmc && priv->io_1v8 && !v18) {
++		ret = rockchip_iodomain_set_voltage(priv->vqmmc, 3300000);
++		if (ret)
++			return ret;
++		priv->io_1v8 = false;
++	}
++
++	ret = dwmci_set_ios(dev);
++	if (ret)
++		return ret;
++
++	if (priv->vqmmc && !priv->io_1v8 && v18) {
++		ret = rockchip_iodomain_set_voltage(priv->vqmmc, 1800000);
++		if (ret)
++			return ret;
++		priv->io_1v8 = true;
++	}
++
++	rockchip_dwmmc_set_phases(priv, mmc);
++
++	return 0;
++}
++
++#if CONFIG_IS_ENABLED(MMC_SUPPORTS_TUNING)
++/*
++ * Find the sample phase: read the tuning block at every 10 degrees and take
++ * the middle of the longest run of good reads (Linux's
++ * dw_mci_rk3288_execute_tuning()).
++ */
++static int rockchip_dwmmc_execute_tuning(struct udevice *dev, uint opcode)
++{
++	struct rockchip_dwmmc_priv *priv = dev_get_priv(dev);
++	struct mmc *mmc = mmc_get_mmc_dev(dev);
++	struct dwmci_host *host = &priv->host;
++	const int n = ROCKCHIP_MMC_TUNING_STEPS;
++	bool good[ROCKCHIP_MMC_TUNING_STEPS];
++	int i, start, len, best = -1, best_len = 0, ngood = 0;
++
++	if (!priv->phase_reg)
++		return -ENOSYS;
++
++	/* a read that never starts fails in ~0.5 ms, not 0.1 s */
++	dwmci_writel(host, DWMCI_TMOUT, 0x10000 << 8 | 0xff);
++	for (i = 0; i < n; i++) {
++		rockchip_dwmmc_set_phase(priv->phase_reg + 4, mmc->clock,
++					 i * 360 / n);
++		good[i] = !mmc_send_tuning(mmc, opcode);
++		ngood += good[i];
++	}
++	dwmci_writel(host, DWMCI_TMOUT, 0xffffffff);
++
++	if (ngood == n) {
++		best = 0;
++	} else {
++		for (start = 0; start < n; start++) {
++			if (!good[start] || good[(start + n - 1) % n])
++				continue;
++			for (len = 0; good[(start + len) % n]; len++)
++				;
++			if (len > best_len) {
++				best = (start + len / 2) % n;
++				best_len = len;
++			}
++		}
++	}
++
++	if (best < 0) {
++		priv->sample_phase = -1;
++		rockchip_dwmmc_set_phases(priv, mmc);
++		dev_dbg(dev, "no sample phase works\n");
++		return -EIO;
++	}
++	priv->sample_phase = best * 360 / n;
++	rockchip_dwmmc_set_phases(priv, mmc);
++	dev_dbg(dev, "sample phase %d (%d of %d phases good)\n",
++		priv->sample_phase, ngood, n);
++
++	return 0;
++}
++#endif
++
++/*
++ * A card switched to 1.8 V signalling only goes back to 3.3 V when its power
++ * is cut, which the High Speed retry after a failed UHS boot needs. vmmc is
++ * always-on, so the core can't do it: cut it here, past the regulator's
++ * always-on check, but only then. Powering the card off at every init costs
++ * ~40 ms of card start-up.
++ */
++static int rockchip_dwmmc_host_power_cycle(struct udevice *dev)
++{
++	struct rockchip_dwmmc_priv *priv = dev_get_priv(dev);
++	const struct dm_regulator_ops *ops;
++	int ret;
++
++	if (!priv->vmmc || !priv->io_1v8)
++		return 0;
++	ops = dev_get_driver_ops(priv->vmmc);
++	if (!ops || !ops->set_enable)
++		return -ENOSYS;
++	/* every card init counted one more enable: drop them all */
++	do
++		ret = ops->set_enable(priv->vmmc, false);
++	while (ret == -EBUSY);
++	if (ret)
++		return -ENOSYS;
++	mdelay(20);	/* let it drain */
++	ops->set_enable(priv->vmmc, true);
++	dev_dbg(dev, "card power cut to leave 1.8 V signalling\n");
++
++	return 0;
++}
++
++static const struct dm_mmc_ops rockchip_dwmmc_ops = {
++	.send_cmd	= dwmci_send_cmd,
++	.set_ios	= rockchip_dwmmc_set_ios,
++	.host_power_cycle = rockchip_dwmmc_host_power_cycle,
++#if CONFIG_IS_ENABLED(MMC_SUPPORTS_TUNING)
++	.execute_tuning	= rockchip_dwmmc_execute_tuning,
++#endif
++};
++
++/*
++ * UHS needs 1.8 V signalling, an IO domain that follows vqmmc, and phases
++ * we can set (RK3568 only here). Anything missing leaves High Speed.
++ */
++static void rockchip_dwmmc_setup_uhs(struct udevice *dev,
++				     struct mmc_config *cfg)
++{
++	struct rockchip_dwmmc_priv *priv = dev_get_priv(dev);
++	struct clk drv;
++	int uV;
++
++	if (!CONFIG_IS_ENABLED(MMC_UHS_SUPPORT) ||
++	    !dev_read_bool(dev, "sd-uhs-sdr104") ||
++	    !device_is_compatible(dev, "rockchip,rk3568-dw-mshc"))
++		return;
++
++	if (clk_get_by_name(dev, "ciu-drive", &drv) ||
++	    drv.id < SCLK_SDMMC0_DRV || drv.id > SCLK_EMMC_DRV ||
++	    (drv.id - SCLK_SDMMC0_DRV) % 2)
++		return;
++	/* CRU SDMMC0_CON0 at 0x580, then SDMMC1, SDMMC2, EMMC */
++	priv->phase_reg = dev_read_addr_ptr(drv.dev) + 0x580 +
++			  (drv.id - SCLK_SDMMC0_DRV) * 4;
++	priv->sample_phase = -1;
++
++	if (device_get_supply_regulator(dev, "vqmmc-supply", &priv->vqmmc))
++		return;
++	uV = regulator_get_value(priv->vqmmc);
++	if (uV <= 0 || rockchip_iodomain_set_voltage(priv->vqmmc, uV)) {
++		priv->vqmmc = NULL;
++		return;
++	}
++	priv->io_1v8 = uV <= 1980000;
++	if (device_get_supply_regulator(dev, "vmmc-supply", &priv->vmmc))
++		priv->vmmc = NULL;
++
++	cfg->host_caps |= MMC_CAP(UHS_SDR104) | MMC_CAP(UHS_SDR25) |
++			  MMC_CAP(UHS_SDR12);
++}
++
+ static uint rockchip_dwmmc_get_mmc_clk(struct dwmci_host *host, uint freq)
+ {
+ 	struct udevice *dev = host->priv;
+@@ -158,6 +383,8 @@ static int rockchip_dwmmc_probe(struct udevice *dev)
+ 	if (host->buswidth == 8)
+ 		plat->cfg.host_caps |= MMC_MODE_4BIT;
+ 
++	rockchip_dwmmc_setup_uhs(dev, &plat->cfg);
++
+ 	return dwmci_probe(dev);
+ }
+ 
+@@ -180,7 +407,7 @@ U_BOOT_DRIVER(rockchip_rk3288_dw_mshc) = {
+ 	.id		= UCLASS_MMC,
+ 	.of_match	= rockchip_dwmmc_ids,
+ 	.of_to_plat = rockchip_dwmmc_of_to_plat,
+-	.ops		= &dm_dwmci_ops,
++	.ops		= &rockchip_dwmmc_ops,
+ 	.bind		= rockchip_dwmmc_bind,
+ 	.probe		= rockchip_dwmmc_probe,
+ 	.priv_auto	= sizeof(struct rockchip_dwmmc_priv),
+diff --git a/include/dwmmc.h b/include/dwmmc.h
+index 7e1a6646..ee817e17 100644
+--- a/include/dwmmc.h
++++ b/include/dwmmc.h
+@@ -59,6 +59,8 @@
+ #define DWMCI_DSCADDRU		0x09c
+ #define DWMCI_BUFADDRL		0x0a0
+ #define DWMCI_BUFADDRU		0x0a4
++#define DWMCI_CDTHRCTL		0x100
++#define DWMCI_CDTHRCTL_RD_EN	BIT(0)
+ 
+ /* Interrupt Mask register */
+ #define DWMCI_INTMSK_ALL	0xffffffff
+@@ -144,6 +146,7 @@
+ 
+ /* UHS register */
+ #define DWMCI_DDR_MODE		BIT(16)
++#define DWMCI_UHS_18V		BIT(0)
+ 
+ /* Internal IDMAC interrupt defines */
+ #define DWMCI_IDINTEN_RI	BIT(1)
+@@ -338,6 +341,9 @@ int add_dwmci(struct dwmci_host *host, u32 max_clk, u32 min_clk);
+ #ifdef CONFIG_DM_MMC
+ /* Export the operations to drivers */
+ int dwmci_probe(struct udevice *dev);
++int dwmci_set_ios(struct udevice *dev);
++int dwmci_send_cmd(struct udevice *dev, struct mmc_cmd *cmd,
++		   struct mmc_data *data);
+ extern const struct dm_mmc_ops dm_dwmci_ops;
+ #endif
+ 
+diff --git a/include/rockchip-io-domain.h b/include/rockchip-io-domain.h
+new file mode 100644
+index 00000000..b4c22773
+--- /dev/null
++++ b/include/rockchip-io-domain.h
+@@ -0,0 +1,27 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#ifndef _ROCKCHIP_IO_DOMAIN_H
++#define _ROCKCHIP_IO_DOMAIN_H
++
++struct udevice;
++
++/**
++ * rockchip_iodomain_set_voltage() - Set the IO domain a regulator supplies
++ *
++ * Tells the SoC which voltage its pads in the IO domain fed by @supply run
++ * at. Set the domain to 3.3 V before raising the supply, and to 1.8 V only
++ * after lowering it: 1.8 V pads at 3.3 V can be damaged.
++ *
++ * @supply:	The regulator feeding the IO domain
++ * @uV:		Its voltage
++ * Return: 0 if set, -ENODEV if no IO domain has @supply as its supply
++ */
++#if CONFIG_IS_ENABLED(ROCKCHIP_IODOMAIN)
++int rockchip_iodomain_set_voltage(struct udevice *supply, int uV);
++#else
++static inline int rockchip_iodomain_set_voltage(struct udevice *supply, int uV)
++{
++	return -ENODEV;
++}
++#endif
++
++#endif

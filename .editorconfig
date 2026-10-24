@@ -1,0 +1,18 @@
+# Indentation as the files already have it (CONTRIBUTING.md).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{sh,py,rs,toml,service,target,conf,rules,md}]
+indent_style = space
+indent_size = 4
+
+[{*.c,*.dts,*.patch,Makefile}]
+indent_style = tab
+
+[*.md]
+trim_trailing_whitespace = false

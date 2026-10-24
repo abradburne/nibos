@@ -1,0 +1,21 @@
+[package]
+name = "nibos-hw"
+version = "0.1.0"
+edition = "2021"
+description = "nibOS hardware daemons: nibos-input (one gamepad), nibos-audio (headphone/speaker switching), nibos-keys (the console's on-screen keyboard)"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+evdev = "=0.12.2"
+# clock_gettime(CLOCK_BOOTTIME), to see that the system slept (nibos-input).
+libc = "0.2"
+# nibos-keys: the keyboard (menu::keys), drawn (menu-raster), and the touch panel.
+nibkit = { git = "https://github.com/abradburne/nibkit", tag = "v0.1.0", default-features = false, features = ["nibos", "menu-raster"] }
+# provision.toml (nibos-provision).
+toml = { version = "0.8", default-features = false, features = ["parse"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+panic = "abort"

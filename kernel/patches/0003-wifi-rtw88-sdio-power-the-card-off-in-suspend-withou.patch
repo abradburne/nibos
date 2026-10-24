@@ -1,0 +1,146 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Sun, 18 Oct 2026 10:50:20 +0900
+Subject: [PATCH 3/3] wifi: rtw88: sdio: power the card off in suspend without
+ WoWLAN
+
+rtw88 asks the MMC core to keep the SDIO card powered through system
+suspend (MMC_PM_KEEP_POWER). On the RG DS+ the RTL8821CS no longer
+answers after deep sleep, not even CMD52 ("Timeout sending command",
+"mac power on failed", mac80211 "Hardware became unavailable upon
+resume"), and Wi-Fi stays gone until the module is reloaded.
+
+Without WoWLAN mac80211 stops the chip before suspend and starts it again
+on resume anyway, so keeping it powered buys nothing. Don't ask for
+keep-power then: the core powers the card off through the power sequence
+and initialises it again on resume. The core does not restore the
+function's own setup, so rtw88's resume does: the function enable, the
+512-byte block size (without it CMD52 works but every CMD53 transfer
+times out and the firmware download fails), the host interface resume
+and the SDIO interrupt, which suspend now releases (mmc_sdio_suspend()
+warns about a claimed IRQ on a card that loses power).
+
+4 of 4 RTC-woken suspend cycles from a fresh boot then resumed with
+Wi-Fi associated ~1.9 s after "PM: suspend exit", replacing a sleep hook
+that unloaded the driver around every suspend (4.6 s).
+
+Upstream status: candidate.
+---
+ drivers/net/wireless/realtek/rtw88/sdio.c | 84 +++++++++++++++++------
+ drivers/net/wireless/realtek/rtw88/sdio.h |  1 +
+ 2 files changed, 63 insertions(+), 22 deletions(-)
+
+diff --git a/drivers/net/wireless/realtek/rtw88/sdio.c b/drivers/net/wireless/realtek/rtw88/sdio.c
+index 14d9105e4..8ae96c5d1 100644
+--- a/drivers/net/wireless/realtek/rtw88/sdio.c
++++ b/drivers/net/wireless/realtek/rtw88/sdio.c
+@@ -1122,28 +1122,6 @@ static void rtw_sdio_handle_interrupt(struct sdio_func *sdio_func)
+ 	rtwsdio->irq_thread = NULL;
+ }
+ 
+-static int __maybe_unused rtw_sdio_suspend(struct device *dev)
+-{
+-	struct sdio_func *func = dev_to_sdio_func(dev);
+-	struct ieee80211_hw *hw = dev_get_drvdata(dev);
+-	struct rtw_dev *rtwdev = hw->priv;
+-	int ret;
+-
+-	ret = sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
+-	if (ret)
+-		rtw_err(rtwdev, "Failed to host PM flag MMC_PM_KEEP_POWER");
+-
+-	return ret;
+-}
+-
+-static int __maybe_unused rtw_sdio_resume(struct device *dev)
+-{
+-	return 0;
+-}
+-
+-SIMPLE_DEV_PM_OPS(rtw_sdio_pm_ops, rtw_sdio_suspend, rtw_sdio_resume);
+-EXPORT_SYMBOL(rtw_sdio_pm_ops);
+-
+ static int rtw_sdio_claim(struct rtw_dev *rtwdev, struct sdio_func *sdio_func)
+ {
+ 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+@@ -1344,6 +1322,68 @@ static void rtw_sdio_deinit_tx(struct rtw_dev *rtwdev)
+ 		ieee80211_purge_tx_queue(rtwdev->hw, &rtwsdio->tx_queue[i]);
+ }
+ 
++static int __maybe_unused rtw_sdio_suspend(struct device *dev)
++{
++	struct sdio_func *func = dev_to_sdio_func(dev);
++	struct ieee80211_hw *hw = dev_get_drvdata(dev);
++	struct rtw_dev *rtwdev = hw->priv;
++	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
++	int ret;
++
++	/*
++	 * Without WoWLAN mac80211 has stopped the chip already and starts it
++	 * again on resume, so let the MMC core power the card off and
++	 * initialize it again on resume: kept powered through deep sleep, the
++	 * RTL8821CS on the RG DS+ doesn't answer afterwards. The function's
++	 * own setup (enable, block size, interrupt) is ours to restore.
++	 */
++	if (!hw->wiphy->wowlan_config) {
++		rtw_sdio_free_irq(rtwdev, func);
++		rtwsdio->powered_off = true;
++		return 0;
++	}
++
++	ret = sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
++	if (ret)
++		rtw_err(rtwdev, "Failed to host PM flag MMC_PM_KEEP_POWER");
++
++	return ret;
++}
++
++static int __maybe_unused rtw_sdio_resume(struct device *dev)
++{
++	struct sdio_func *func = dev_to_sdio_func(dev);
++	struct ieee80211_hw *hw = dev_get_drvdata(dev);
++	struct rtw_dev *rtwdev = hw->priv;
++	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
++	int ret;
++
++	if (!rtwsdio->powered_off)
++		return 0;
++	rtwsdio->powered_off = false;
++
++	sdio_claim_host(func);
++	ret = sdio_enable_func(func);
++	if (!ret)
++		ret = sdio_set_block_size(func, RTW_SDIO_BLOCK_SIZE);
++	sdio_release_host(func);
++	if (ret) {
++		rtw_err(rtwdev, "failed to set up the SDIO function again: %d", ret);
++		return ret;
++	}
++
++	ret = rtw_sdio_resume_hci(rtwdev);
++	if (ret) {
++		rtw_err(rtwdev, "failed to resume the SDIO host interface");
++		return ret;
++	}
++
++	return rtw_sdio_request_irq(rtwdev, func);
++}
++
++SIMPLE_DEV_PM_OPS(rtw_sdio_pm_ops, rtw_sdio_suspend, rtw_sdio_resume);
++EXPORT_SYMBOL(rtw_sdio_pm_ops);
++
+ int rtw_sdio_probe(struct sdio_func *sdio_func,
+ 		   const struct sdio_device_id *id)
+ {
+diff --git a/drivers/net/wireless/realtek/rtw88/sdio.h b/drivers/net/wireless/realtek/rtw88/sdio.h
+index 457e8b023..578c59c88 100644
+--- a/drivers/net/wireless/realtek/rtw88/sdio.h
++++ b/drivers/net/wireless/realtek/rtw88/sdio.h
+@@ -153,6 +153,7 @@ struct rtw_sdio {
+ 	u32 irq_mask;
+ 	u8 rx_addr;
+ 	bool sdio3_bus_mode;
++	bool powered_off;
+ 
+ 	void *irq_thread;
+ 

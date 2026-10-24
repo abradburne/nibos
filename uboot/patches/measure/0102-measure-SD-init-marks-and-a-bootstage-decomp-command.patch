@@ -1,0 +1,137 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 08:16:11 +0900
+Subject: [PATCH 102/103] measure: SD init marks and a "bootstage decomp"
+ command
+
+Not for use in a normal build: uboot/build.sh applies it with MEASURE=1.
+
+Marks the steps of an SD card's initialisation in mmc.c, and adds
+"bootstage decomp TYPE SRC LEN DST", which unpacks a loaded kernel so the
+boot command can time decompression on its own.
+---
+ cmd/bootstage.c   | 24 +++++++++++++++++++++++-
+ drivers/mmc/mmc.c | 10 ++++++++++
+ 2 files changed, 33 insertions(+), 1 deletion(-)
+
+diff --git a/cmd/bootstage.c b/cmd/bootstage.c
+index 504c9039..bf576a0f 100644
+--- a/cmd/bootstage.c
++++ b/cmd/bootstage.c
+@@ -96,7 +96,29 @@ static int do_bootstage_conlog(struct cmd_tbl *cmdtp, int flag, int argc,
+ }
+ #endif
+ 
++#include <image.h>
++
++static int do_bootstage_decomp(struct cmd_tbl *cmdtp, int flag, int argc,
++			       char *const argv[])
++{
++	ulong src, len, dst, end;
++	int comp, ret;
++
++	if (argc < 5)
++		return CMD_RET_USAGE;
++	comp = genimg_get_comp_id(argv[1]);
++	src = hextoul(argv[2], NULL);
++	len = hextoul(argv[3], NULL);
++	dst = hextoul(argv[4], NULL);
++	ret = image_decomp(comp, dst, src, IH_TYPE_KERNEL, (void *)dst,
++			   (void *)src, len, 0x8000000, &end);
++	printf("decomp %s: %d, %lu bytes\n", argv[1], ret, end - dst);
++
++	return ret ? CMD_RET_FAILURE : 0;
++}
++
+ static struct cmd_tbl cmd_bootstage_sub[] = {
++	U_BOOT_CMD_MKENT(decomp, 5, 0, do_bootstage_decomp, "", ""),
+ #if IS_ENABLED(CONFIG_CONSOLE_RECORD)
+ 	U_BOOT_CMD_MKENT(conlog, 3, 0, do_bootstage_conlog, "", ""),
+ #endif
+@@ -129,7 +151,7 @@ static int do_boostage(struct cmd_tbl *cmdtp, int flag, int argc,
+ 		return CMD_RET_USAGE;
+ }
+ 
+-U_BOOT_CMD(bootstage, 4, 1, do_boostage,
++U_BOOT_CMD(bootstage, 6, 1, do_boostage,
+ 	"Boot stage command",
+ 	" - check boot progress and timing\n"
+ 	"report                      - Print a report\n"
+diff --git a/drivers/mmc/mmc.c b/drivers/mmc/mmc.c
+index 6f8d1838..9a1f5aae 100644
+--- a/drivers/mmc/mmc.c
++++ b/drivers/mmc/mmc.c
+@@ -20,6 +20,7 @@
+ #include <linux/bitops.h>
+ #include <linux/delay.h>
+ #include <linux/printk.h>
++#include <bootstage.h>
+ #include <linux/sizes.h>
+ #include <power/regulator.h>
+ #include <malloc.h>
+@@ -710,6 +711,7 @@ static int sd_send_op_cond(struct mmc *mmc, bool uhs_en)
+ 
+ 		udelay(1000);
+ 	}
++	printf("ACMD41: %d polls\n", 1000 - timeout);
+ 
+ 	if (mmc->version != SD_VERSION_2)
+ 		mmc->version = SD_VERSION_1_0;
+@@ -2569,6 +2571,7 @@ static int mmc_startup(struct mmc *mmc)
+ 	}
+ #endif
+ 
++	bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "mmc_startup");
+ 	/* Put the Card in Identify Mode */
+ 	cmd.cmdidx = mmc_host_is_spi(mmc) ? MMC_CMD_SEND_CID :
+ 		MMC_CMD_ALL_SEND_CID; /* cmd not supported in spi */
+@@ -2692,6 +2695,7 @@ static int mmc_startup(struct mmc *mmc)
+ 			pr_warn("MMC: SET_DSR failed\n");
+ 	}
+ 
++	bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "mmc_csd");
+ 	/* Select the card, and put it into Transfer Mode */
+ 	if (!mmc_host_is_spi(mmc)) { /* cmd not supported in spi */
+ 		cmd.cmdidx = MMC_CMD_SELECT_CARD;
+@@ -2726,6 +2730,7 @@ static int mmc_startup(struct mmc *mmc)
+ #else
+ 	if (IS_SD(mmc)) {
+ 		err = sd_get_capabilities(mmc);
++		bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "sd_caps");
+ 		if (err)
+ 			return err;
+ 
+@@ -2751,6 +2756,7 @@ static int mmc_startup(struct mmc *mmc)
+ #endif
+ 
+ 		err = sd_select_mode_and_width(mmc, mmc->card_caps);
++		bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "sd_mode");
+ 	} else {
+ 		err = mmc_get_capabilities(mmc);
+ 		if (err)
+@@ -2985,6 +2991,7 @@ int mmc_get_op_cond(struct mmc *mmc, bool quiet)
+ #endif
+ 
+ 	err = mmc_power_cycle(mmc);
++	bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "mmc_power_cycle");
+ 	if (err) {
+ 		/*
+ 		 * if power cycling is not supported, we should not try
+@@ -3020,6 +3027,7 @@ retry:
+ 
+ 	/* Reset the Card */
+ 	err = mmc_go_idle(mmc);
++	bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "mmc_go_idle");
+ 
+ 	if (err)
+ 		return err;
+@@ -3031,7 +3039,9 @@ retry:
+ 	err = mmc_send_if_cond(mmc);
+ 
+ 	/* Now try to get the SD card's operating condition */
++	bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "mmc_if_cond");
+ 	err = sd_send_op_cond(mmc, uhs_en);
++	bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "sd_op_cond");
+ 	if (err && uhs_en) {
+ 		uhs_en = false;
+ 		mmc_power_cycle(mmc);

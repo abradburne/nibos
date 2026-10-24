@@ -1,0 +1,14 @@
+# nibos-hw: load the drivers kept out of start-up once booted: the SoC's video
+# decode/encode and 2D blit drivers (NIBOS_LATE_MODULES in
+# /usr/lib/nibos/soc.conf; blacklisted at boot in modprobe.d/nibos-late.conf).
+[Unit]
+Description=Load the video drivers kept out of start-up
+After=multi-user.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/usr/lib/nibos/soc.conf
+ExecStart=/usr/bin/modprobe -a $NIBOS_LATE_MODULES
+
+[Install]
+WantedBy=multi-user.target

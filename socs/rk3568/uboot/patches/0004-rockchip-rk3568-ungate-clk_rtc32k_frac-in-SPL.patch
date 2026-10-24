@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Sat, 17 Oct 2026 17:06:45 +0900
+Subject: [PATCH 4/4] rockchip: rk3568: ungate clk_rtc32k_frac in SPL
+
+clk_rtc_32k, the PMU's low-power clock, runs from clk_rtc32k_frac (24 MHz
+divided to 32.768 kHz). Only U-Boot proper's clock driver opens its gate
+(PMUCRU PMUGATE_CON0 bit 1); in Falcon mode, with no U-Boot proper, it
+stays closed, and TF-A's core and cluster power-down, which s2idle and
+suspend use, never completes. Open it in arch_cpu_init() in SPL too.
+With it, 10 of 10 RTC-woken suspend cycles on a Falcon boot.
+
+Linux marks the clock critical as well (kernel patch "clk: rockchip:
+rk3568: keep clk_rtc32k_frac running").
+
+Upstream status: candidate.
+---
+ arch/arm/mach-rockchip/rk3568/rk3568.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/arch/arm/mach-rockchip/rk3568/rk3568.c b/arch/arm/mach-rockchip/rk3568/rk3568.c
+index 2b1eafee..0a6607e5 100644
+--- a/arch/arm/mach-rockchip/rk3568/rk3568.c
++++ b/arch/arm/mach-rockchip/rk3568/rk3568.c
+@@ -27,6 +27,9 @@
+ #define SDMMC0_HPROT_SECURE_CTRL	0x01
+ 
+ #define PMU_BASE_ADDR		0xfdd90000
++#define PMUCRU_BASE_ADDR	0xfdd00000
++#define PMUCRU_PMUGATE_CON0	(0x180)
++#define CLK_RTC32K_FRAC_GATE	BIT(1)
+ #define PMU_NOC_AUTO_CON0	(0x70)
+ #define PMU_NOC_AUTO_CON1	(0x74)
+ #define PMU_PWR_GATE_SFTCON	(0xa0)
+@@ -145,6 +148,15 @@ int arch_cpu_init(void)
+ 	/* Enable VO power domain for display */
+ 	writel((PMU_PD_VO_DWN_ENA << 16),
+ 	       PMU_BASE_ADDR + PMU_PWR_GATE_SFTCON);
++
++	/*
++	 * Ungate clk_rtc32k_frac, the 32.768 kHz clock divided from xin24m
++	 * that clk_rtc_32k (the PMU's low-power clock) runs from. U-Boot
++	 * proper's clock driver does this; without U-Boot proper (Falcon
++	 * mode) it stays gated, and TF-A's core and cluster power-down,
++	 * which s2idle and suspend use, never completes.
++	 */
++	writel(CLK_RTC32K_FRAC_GATE << 16, PMUCRU_BASE_ADDR + PMUCRU_PMUGATE_CON0);
+ #endif
+ 	return 0;
+ }

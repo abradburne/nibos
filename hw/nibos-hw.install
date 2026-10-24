@@ -1,0 +1,59 @@
+# nibos-hw's install hooks. The units are enabled here rather than shipped as
+# symlinks, so `nib net mode` and the user can change them afterwards.
+units="nibos-input.service nibos-cpufreq.service nibos-late-modules.service nibos-zram.service nibos-backlight.service nibos-charge-boot.service nibos-boot-good.service nibos-radios-restore.service"
+
+post_install() {
+    # The speakers' tuning: an official file the device has, else nibOS's (nib audio).
+    /usr/lib/nibos/nib-audio setup >/dev/null 2>&1 || true
+    systemctl enable $units >/dev/null 2>&1 || true
+    systemctl --global enable nibos-audio.service >/dev/null 2>&1 || true
+    udevadm control --reload >/dev/null 2>&1 || true
+    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf >/dev/null 2>&1 || true
+    # Start from the levels the screens have now (systemd's restore set them).
+    nibos-backlight save >/dev/null 2>&1 || true
+    # "add", as at boot: the LED, wake-up and backlight rules match only that.
+    udevadm trigger --action=add --subsystem-match=input --subsystem-match=leds --subsystem-match=backlight --subsystem-match=power_supply >/dev/null 2>&1 || true
+    # Network: iwd comes with nibos-network.target; the default is at boot
+    # (`nib net mode deferred|demand` changes it).
+    systemctl disable iwd.service >/dev/null 2>&1 || true
+    systemctl enable nibos-network.target nibos-network-modules.service >/dev/null 2>&1 || true
+}
+
+# The board's firmware from its stock image (the RG DS+'s speaker tuning file) was in the
+# package up to 0.1.0-22; it isn't ours to redistribute, so it no longer is. Keep the
+# device's copy across the upgrade that drops it, as a file no package owns.
+# (Not /var/lib/nibos/firmware: nib audio keeps the speakers' tuning there.)
+keep=/var/lib/nibos/firmware-upgrade
+
+pre_upgrade() {
+    pacman -Qlq nibos-hw 2>/dev/null | grep '^/usr/lib/firmware/.' | while read -r f; do
+        [ -f "$f" ] && mkdir -p "$keep" && cp -p "$f" "$keep/"
+    done
+    true
+}
+
+post_upgrade() {
+    for f in "$keep"/*; do
+        [ -f "$f" ] && [ ! -e "/usr/lib/firmware/${f##*/}" ] && cp -p "$f" /usr/lib/firmware/
+    done
+    rm -rf "$keep"
+    # The speakers' tuning: an official file the device has, else nibOS's (nib audio).
+    /usr/lib/nibos/nib-audio setup >/dev/null 2>&1 || true
+    systemctl disable iwd.service >/dev/null 2>&1 || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    # Units new in this version, enabled as a fresh install would.
+    systemctl enable nibos-backlight.service nibos-charge-boot.service nibos-boot-good.service nibos-radios-restore.service >/dev/null 2>&1 || true
+    systemctl start nibos-backlight.service >/dev/null 2>&1 || true
+    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf >/dev/null 2>&1 || true
+    [ -n "$(ls /var/lib/nibos/backlight 2>/dev/null)" ] || nibos-backlight save >/dev/null 2>&1 || true
+    udevadm control --reload >/dev/null 2>&1 || true
+    udevadm trigger --action=add --subsystem-match=backlight --subsystem-match=power_supply >/dev/null 2>&1 || true
+    # The new daemon. (nibos-audio, a user service, follows at the next login
+    # or restart.)
+    systemctl try-restart nibos-input.service >/dev/null 2>&1 || true
+}
+
+pre_remove() {
+    systemctl disable --now $units >/dev/null 2>&1 || true
+    systemctl --global disable nibos-audio.service >/dev/null 2>&1 || true
+}

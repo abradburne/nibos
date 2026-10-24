@@ -1,0 +1,137 @@
+#!/bin/sh
+# nib audio: the speaker amps' tuning: nibOS's own, or the official one imported from a stock card
+#
+#   nib audio [tuning]                which tuning the speakers use (nibos, official, none)
+#   nib audio import-tuning [SOURCE]  import the official tuning from your own stock firmware:
+#                                     a stock card (found by itself in TF2, or a partition such
+#                                     as /dev/sda8), or a stock image file (.img, .img.gz, .img.xz)
+#   nib audio tuning nibos|official   use nibOS's tuning, or the imported one again
+#   nib audio setup                   (the package's install hook) an active tuning if there is
+#                                     none: an official file the device already has, else nibOS's
+#
+# The amps (AW88166) need a tuning file to play. nibOS ships its own (boards/<board>/hw/
+# aw88166-tuning.py: the DSP bypassed, conservative gain and boost). Awinic's official one, with
+# the DSP's speaker protection and EQ, is in the stock firmware, which isn't ours to
+# redistribute, so it is imported from yours. The active file is
+# /var/lib/nibos/firmware/aw88166_acf.bin, which the kernel reads first (firmware_class.path);
+# the imported one is kept beside it. The amps read it when they start: restart to apply a
+# change. Changing it needs root (the wheel group may run it with sudo).
+set -eu
+dir=${NIBOS_FIRMWARE_DIR:-/var/lib/nibos/firmware}   # (another, for testing)
+active=$dir/aw88166_acf.bin
+official=$dir/aw88166-official.bin
+ours=${NIBOS_TUNING:-/usr/lib/nibos/aw88166-nibos.bin}
+# Where the file is in the stock firmware: its root file system (partition 8, "rootfs", ext4,
+# at sector 491520 of the stock card or image: boards/rg-ds-plus/extract-stock.sh).
+stock_path=/lib/firmware/aw883xx_acf.bin
+stock_part=8
+stock_offset=$((491520 * 512))
+# The ACF file's magic number (aw88395_data_type.h: ACF_FILE_ID), little-endian.
+magic=08f9150a
+
+# (sha256sum, not cmp: diffutils isn't in the image.)
+same() { [ -f "$1" ] && [ -f "$2" ] && [ "$(sha256sum < "$1")" = "$(sha256sum < "$2")" ]; }
+status() {
+    if same "$active" "$ours"; then echo nibos
+    elif same "$active" "$official"; then echo official
+    elif [ -f "$active" ]; then echo other
+    else echo none
+    fi
+}
+need_root() { [ "$(id -u)" = 0 ] || { echo "nib audio: $1 needs root (sudo nib audio ...)" >&2; exit 1; }; }
+use() { # FILE
+    install -d "$dir"
+    install -m644 "$1" "$active.new" && mv "$active.new" "$active"
+    echo "speaker tuning: $(status) (restart to apply)"
+}
+
+# Dump the file from a stock root file system (an ext4 device, or an image at an offset).
+dump() { # SOURCE OUT
+    debugfs -R "dump $stock_path $2" "$1" 2>/dev/null || true
+    [ -s "$2" ] && [ "$(od -An -tx1 -N4 "$2" | tr -d ' \n')" = "$magic" ]
+}
+
+import_from() { # SOURCE -> the official file in $tmp/acf
+    src=$1
+    case "$src" in
+    /dev/*)
+        if [ -n "$(lsblk -no PARTN "$src" 2>/dev/null)" ]; then
+            dump "$src" "$tmp/acf"
+        else
+            # A whole card: its stock root partition.
+            p=$(lsblk -lnpo NAME,PARTLABEL "$src" | awk '$2 == "rootfs" { print $1 }')
+            [ -n "$p" ] || p=${src}p$stock_part
+            dump "$p" "$tmp/acf"
+        fi
+        ;;
+    *.img | *.IMG) dump "$src?offset=$stock_offset" "$tmp/acf" ;;
+    *.img.gz | *.img.xz | *.IMG.gz | *.IMG.xz)
+        # The root partition is near the start; unpacking up to its end (~5.3 GB) is enough.
+        need=$((5500 * 1024 * 1024))
+        work=$(dirname "$src")
+        free=$(df -B1 --output=avail "$work" | tail -1)
+        [ "$free" -gt "$need" ] || { echo "nib audio: unpacking needs ~5.5 GB free beside $src" >&2; return 1; }
+        part=$work/.nibos-stock-part.img
+        case "$src" in *.gz) un="gzip -dc" ;; *) un="xz -dc" ;; esac
+        $un "$src" | dd of="$part" bs=4M count=$(((need + 4194303) / 4194304)) iflag=fullblock status=none || true
+        dump "$part?offset=$stock_offset" "$tmp/acf" || { rm -f "$part"; return 1; }
+        rm -f "$part"
+        ;;
+    *) echo "nib audio: $src: give a stock card's device, its root partition, or an .img, .img.gz or .img.xz" >&2; return 1 ;;
+    esac
+}
+
+case "${1:-tuning}" in
+tuning)
+    case "${2:-}" in
+    "") echo "speaker tuning: $(status)" ;;
+    nibos) need_root "changing the tuning"; use "$ours" ;;
+    official)
+        need_root "changing the tuning"
+        [ -f "$official" ] || { echo "nib audio: no official tuning imported (nib audio import-tuning)" >&2; exit 1; }
+        use "$official"
+        ;;
+    *) echo "usage: nib audio tuning [nibos|official]" >&2; exit 2 ;;
+    esac
+    ;;
+import-tuning)
+    need_root "importing the tuning"
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    if [ -n "${2:-}" ]; then
+        import_from "$2" || { echo "nib audio: no tuning file found in $2" >&2; exit 1; }
+    else
+        # A stock card in TF2 (mmc 1), or a stock image on the data partition or NIBOS.
+        found=
+        for src in /dev/mmcblk1 /mnt/roms/*.img /mnt/roms/*.IMG /mnt/roms/*.img.gz /mnt/roms/*.img.xz; do
+            [ -e "$src" ] || continue
+            if import_from "$src" 2>/dev/null; then found=$src; break; fi
+        done
+        [ -n "$found" ] || { echo "nib audio: no stock card in TF2 and no stock image in /mnt/roms; give a SOURCE" >&2; exit 1; }
+        echo "found the official tuning in $found"
+    fi
+    install -d "$dir"
+    install -m644 "$tmp/acf" "$official"
+    use "$official"
+    ;;
+setup)
+    need_root "setup"
+    install -d "$dir"
+    # An official file already here (a dev card's, made from the stock image): keep it as such.
+    if [ ! -f "$official" ] && [ -f "$active" ] && ! same "$active" "$ours"; then
+        cp -p "$active" "$official"
+    fi
+    if [ ! -f "$active" ]; then
+        # Older nibOS put the stock file in /usr/lib/firmware.
+        if [ -f /usr/lib/firmware/aw88166_acf.bin ]; then
+            cp -p /usr/lib/firmware/aw88166_acf.bin "$official"
+            cp -p "$official" "$active"
+        elif [ -f "$ours" ]; then
+            cp -p "$ours" "$active"
+        fi
+    fi
+    echo "speaker tuning: $(status)"
+    ;;
+-h | --help | help) sed -n '2,10s/^# \{0,1\}//p' "$0" ;;
+*) echo "usage: nib audio [tuning [nibos|official]] | import-tuning [SOURCE]" >&2; exit 2 ;;
+esac

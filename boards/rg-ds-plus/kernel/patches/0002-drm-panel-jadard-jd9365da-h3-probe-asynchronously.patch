@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 11:09:04 +0900
+Subject: [PATCH 2/3] drm/panel: jadard-jd9365da-h3: probe asynchronously
+
+Attaching the second panel binds the whole Rockchip display pipeline, and
+the first modeset then prepares and initialises both panels, each ~0.4 s
+of sleeps in its power-on sequence (reset 5 + 10 + 130 ms, sleep-out
+120 ms, display on 20 ms). With the driver built in, all of that ran
+inside jadard_driver_init(), and every initcall after it, the root
+file system's included, waited: 0.81 s of a 2.03 s kernel start on the
+RG DS+ (initcall_debug).
+
+With PROBE_PREFER_ASYNCHRONOUS the probe runs beside the other
+initcalls. The root mount still waits for it through
+wait_for_device_probe(), but it now ends at about the time the root SD
+card is ready.
+
+Upstream status: candidate. Nothing in the driver depends on probe order.
+---
+ drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c b/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
+index b100b0482..e597a0c18 100644
+--- a/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
++++ b/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
+@@ -3454,6 +3454,13 @@ static struct mipi_dsi_driver jadard_driver = {
+ 	.driver = {
+ 		.name = "jadard-jd9365da",
+ 		.of_match_table = jadard_of_match,
++		/*
++		 * Attaching the panel binds the whole display pipeline, and the
++		 * first modeset sleeps ~0.4 s per panel in prepare and init.
++		 * Built in, that holds up every initcall after it (and so the
++		 * root file system); asynchronously it overlaps them.
++		 */
++		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+ 	},
+ };
+ module_mipi_dsi_driver(jadard_driver);

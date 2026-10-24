@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 07:45:13 +0900
+Subject: [PATCH 2/4] spl: atf: boot Linux through TF-A (Falcon mode)
+
+SPL's TF-A path only knew how to hand over to U-Boot: it looked for an
+IH_OS_U_BOOT image in the FIT, gave BL33 the primary CPU's MPID in x0,
+and recorded the loadables in the FIT's device tree only for SPL_OS_BOOT
+and OpenSBI.
+
+When the FIT carries a Linux kernel and no U-Boot, start the kernel as
+BL33 with the FIT's device tree (which SPL has loaded) in x0, as the
+arm64 boot protocol asks, and have os_takes_devicetree() say yes for
+Linux with SPL_ATF as well, so the loadables are recorded in that device
+tree and spl_invoke_atf() finds the kernel. With this the RG DS+ boots
+SPL -> TF-A -> Linux with no U-Boot proper: the kernel starts 0.65 s
+after reset instead of 0.89 s.
+
+Upstream status: candidate.
+---
+ common/spl/spl_atf.c | 32 +++++++++++++++++++++++++++-----
+ common/spl/spl_fit.c |  8 +++++++-
+ 2 files changed, 34 insertions(+), 6 deletions(-)
+
+diff --git a/common/spl/spl_atf.c b/common/spl/spl_atf.c
+index 17acd366..05bb0e65 100644
+--- a/common/spl/spl_atf.c
++++ b/common/spl/spl_atf.c
+@@ -18,6 +18,18 @@
+ #include <asm/cache.h>
+ 
+ /* Holds all the structures we need for bl31 parameter passing */
++/* Set when BL33 is a Linux kernel (Falcon mode): its device tree's address. */
++static ulong spl_atf_bl33_fdt;
++
++/*
++ * What BL33 gets in x0: U-Boot takes the primary CPU MPID, Linux takes the
++ * address of its device tree.
++ */
++static ulong bl33_arg0(void)
++{
++	return spl_atf_bl33_fdt ? spl_atf_bl33_fdt : 0xffff & read_mpidr();
++}
++
+ struct bl2_to_bl31_params_mem {
+ 	struct bl31_params bl31_params;
+ 	struct atf_image_info bl31_image_info;
+@@ -87,8 +99,7 @@ struct bl31_params *bl2_plat_get_bl31_params_default(ulong bl32_entry,
+ 	SET_PARAM_HEAD(bl33_ep_info, ATF_PARAM_EP, ATF_VERSION_1,
+ 		       ATF_EP_NON_SECURE);
+ 
+-	/* BL33 expects to receive the primary CPU MPID (through x0) */
+-	bl33_ep_info->args.arg0 = 0xffff & read_mpidr();
++	bl33_ep_info->args.arg0 = bl33_arg0();
+ 	bl33_ep_info->pc = bl33_entry;
+ 	bl33_ep_info->spsr = SPSR_64(MODE_EL2, MODE_SP_ELX,
+ 				     DISABLE_ALL_EXECPTIONS);
+@@ -162,8 +173,7 @@ struct bl_params *bl2_plat_get_bl31_params_v2_default(ulong bl32_entry,
+ 	SET_PARAM_HEAD(bl_params_node->ep_info, ATF_PARAM_EP,
+ 		       ATF_VERSION_2, ATF_EP_NON_SECURE);
+ 
+-	/* BL33 expects to receive the primary CPU MPID (through x0) */
+-	bl_params_node->ep_info->args.arg0 = 0xffff & read_mpidr();
++	bl_params_node->ep_info->args.arg0 = bl33_arg0();
+ 	bl_params_node->ep_info->pc = bl33_entry;
+ 	bl_params_node->ep_info->spsr = SPSR_64(MODE_EL2, MODE_SP_ELX,
+ 						DISABLE_ALL_EXECPTIONS);
+@@ -290,8 +300,20 @@ void __noreturn spl_invoke_atf(struct spl_image_info *spl_image)
+ 	 */
+ 
+ 	node = spl_fit_images_find(blob, IH_OS_U_BOOT);
+-	if (node >= 0)
++	if (node >= 0) {
+ 		bl33_entry = spl_fit_images_get_entry(blob, node);
++	} else {
++		/*
++		 * Falcon mode: no U-Boot in the FIT but a Linux kernel. TF-A
++		 * starts it directly, with the FIT's device tree (which SPL has
++		 * loaded) in x0, as the arm64 boot protocol asks.
++		 */
++		node = spl_fit_images_find(blob, IH_OS_LINUX);
++		if (node >= 0) {
++			bl33_entry = spl_fit_images_get_entry(blob, node);
++			spl_atf_bl33_fdt = (ulong)blob;
++		}
++	}
+ 
+ 	/*
+ 	 * If ATF_NO_PLATFORM_PARAM is set, we override the platform
+diff --git a/common/spl/spl_fit.c b/common/spl/spl_fit.c
+index 9da709fd..6966f2d2 100644
+--- a/common/spl/spl_fit.c
++++ b/common/spl/spl_fit.c
+@@ -447,8 +447,14 @@ static bool os_takes_devicetree(uint8_t os)
+ 	case IH_OS_U_BOOT:
+ 		return true;
+ 	case IH_OS_LINUX:
++		/*
++		 * Falcon mode through TF-A (spl_atf.c) too: Linux needs the
++		 * FIT's device tree, and the loadables must be recorded in it
++		 * for spl_invoke_atf() to find the kernel.
++		 */
+ 		return IS_ENABLED(CONFIG_SPL_OS_BOOT) ||
+-		       IS_ENABLED(CONFIG_SPL_OPENSBI);
++		       IS_ENABLED(CONFIG_SPL_OPENSBI) ||
++		       IS_ENABLED(CONFIG_SPL_ATF);
+ 	default:
+ 		return false;
+ 	}

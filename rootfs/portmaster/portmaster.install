@@ -1,0 +1,11 @@
+# portmaster: give the input group /dev/uinput now (70-portmaster-uinput.rules), not at the
+# next boot, for gptokeyb.
+
+post_install() {
+    udevadm control --reload
+    udevadm trigger --action=change /dev/uinput 2>/dev/null || true
+}
+
+post_upgrade() {
+    post_install
+}

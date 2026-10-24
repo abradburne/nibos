@@ -1,0 +1,9 @@
+# shellcheck settings for the whole repository (make check runs it on every
+# shell script).
+external-sources=true
+source-path=SCRIPTDIR
+# Remote commands are built on this side on purpose: values like $DEVICE's
+# user, sector numbers or the bootargs are known here, and the device's shell
+# gets them already expanded. Where a value must expand on the device, the
+# command is single-quoted or a quoted heredoc.
+disable=SC2029

@@ -1,0 +1,122 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 07:51:56 +0900
+Subject: [PATCH 101/103] measure: bootstage marks for initcalls and probes,
+ console log stash
+
+Not for use in a normal build: uboot/build.sh applies it with MEASURE=1.
+
+Marks every board_init_f initcall and every device probe as a boot
+stage, and adds "bootstage conlog ADDR SIZE", which copies the console
+record buffer to memory for Linux to read, since the RG DS+ has no
+serial console. uboot/measure.sh reads both back.
+---
+ cmd/bootstage.c       | 26 ++++++++++++++++++++++++++
+ common/board_f.c      |  4 +++-
+ drivers/core/device.c |  4 ++++
+ include/initcall.h    |  3 +++
+ 4 files changed, 36 insertions(+), 1 deletion(-)
+
+diff --git a/cmd/bootstage.c b/cmd/bootstage.c
+index f61a52ce..504c9039 100644
+--- a/cmd/bootstage.c
++++ b/cmd/bootstage.c
+@@ -73,7 +73,33 @@ static int do_bootstage_mark(struct cmd_tbl *cmdtp, int flag, int argc,
+ 	return 0;
+ }
+ 
++#if IS_ENABLED(CONFIG_CONSOLE_RECORD)
++#include <membuf.h>
++#include <asm/global_data.h>
++DECLARE_GLOBAL_DATA_PTR;
++
++static int do_bootstage_conlog(struct cmd_tbl *cmdtp, int flag, int argc,
++			       char *const argv[])
++{
++	char *buf;
++	ulong size;
++	int len;
++
++	if (argc < 3)
++		return CMD_RET_USAGE;
++	buf = (char *)hextoul(argv[1], NULL);
++	size = hextoul(argv[2], NULL);
++	len = membuf_get((struct membuf *)&gd->console_out, buf, size - 1);
++	buf[len < 0 ? 0 : len] = 0;
++
++	return 0;
++}
++#endif
++
+ static struct cmd_tbl cmd_bootstage_sub[] = {
++#if IS_ENABLED(CONFIG_CONSOLE_RECORD)
++	U_BOOT_CMD_MKENT(conlog, 3, 0, do_bootstage_conlog, "", ""),
++#endif
+ 	U_BOOT_CMD_MKENT(report, 2, 1, do_bootstage_report, "", ""),
+ 	U_BOOT_CMD_MKENT(mark, 2, 1, do_bootstage_mark, "", ""),
+ #if IS_ENABLED(CONFIG_BOOTSTAGE_STASH)
+diff --git a/common/board_f.c b/common/board_f.c
+index a139d11f..6419a4e3 100644
+--- a/common/board_f.c
++++ b/common/board_f.c
+@@ -617,7 +617,8 @@ static int reserve_fdt(void)
+ static int reserve_bootstage(void)
+ {
+ #ifdef CONFIG_BOOTSTAGE
+-	int size = bootstage_get_size(true);
++	/* Room for the names of the initcalls marked until reloc_bootstage() */
++	int size = bootstage_get_size(true) + 0x400;
+ 
+ 	gd->start_addr_sp = reserve_stack_aligned(size);
+ 	gd->boardf->new_bootstage = map_sysmem(gd->start_addr_sp, size);
+@@ -863,6 +864,7 @@ static int initf_dm(void)
+ 		ret = dm_init(false);
+ 	if (ret)
+ 		return ret;
++	bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "dm_f_bound");
+ 
+ 	ret = dm_autoprobe();
+ 	if (ret)
+diff --git a/drivers/core/device.c b/drivers/core/device.c
+index 6024534f..5247d0a9 100644
+--- a/drivers/core/device.c
++++ b/drivers/core/device.c
+@@ -30,6 +30,7 @@
+ #include <dm/uclass-internal.h>
+ #include <dm/util.h>
+ #include <iommu.h>
++#include <bootstage.h>
+ #include <linux/err.h>
+ #include <linux/list.h>
+ #include <power-domain.h>
+@@ -605,6 +606,9 @@ int device_probe(struct udevice *dev)
+ 	if (ret)
+ 		goto fail_event;
+ 
++	if (!IS_ENABLED(CONFIG_XPL_BUILD))
++		bootstage_mark_name(BOOTSTAGE_ID_ALLOC, dev->name);
++
+ 	return 0;
+ fail_event:
+ fail_uclass:
+diff --git a/include/initcall.h b/include/initcall.h
+index 220a55ad..f7bc1cf4 100644
+--- a/include/initcall.h
++++ b/include/initcall.h
+@@ -9,6 +9,7 @@
+ #include <asm/types.h>
+ #include <event.h>
+ #include <hang.h>
++#include <bootstage.h>
+ 
+ _Static_assert(EVT_COUNT < 256, "Can only support 256 event types with 8 bits");
+ 
+@@ -19,6 +20,8 @@ _Static_assert(EVT_COUNT < 256, "Can only support 256 event types with 8 bits");
+ 			       #_call); \
+ 			hang(); \
+ 		} \
++		if (!IS_ENABLED(CONFIG_XPL_BUILD)) \
++			bootstage_mark_name(BOOTSTAGE_ID_ALLOC, #_call); \
+ 	} while (0)
+ 
+ #define INITCALL_EVT(_evt) \

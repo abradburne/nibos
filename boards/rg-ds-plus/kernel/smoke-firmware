@@ -1,0 +1,7 @@
+# The firmware the smoke-test kernel's initramfs carries (SMOKE=1
+# kernel/build.sh), as /lib/firmware/<path>. A path starting with stock/ is
+# taken from the board's extracted stock files (extract-stock.sh), the rest
+# from the build machine's /usr/lib/firmware (linux-firmware-realtek).
+rtw88/rtw8821c_fw.bin*
+rtl_bt/rtl8821cs_*
+stock/aw88166_acf.bin

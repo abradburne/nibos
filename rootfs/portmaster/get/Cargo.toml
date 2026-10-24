@@ -1,0 +1,32 @@
+[package]
+name = "portmaster-get"
+version = "0.1.0"
+edition = "2021"
+description = "Gets PortMaster for nibOS: asks, downloads the pinned release, checks it, unpacks it"
+license = "GPL-3.0-or-later"
+
+[[bin]]
+name = "portmaster-get"
+path = "src/main.rs"
+
+[dependencies]
+# DSlot's menu, drawn the way DSlot draws it (menu-raster), the screens, the buttons' printed
+# labels, the Wi-Fi switch and the radios.
+nibkit = { git = "https://github.com/abradburne/nibkit", tag = "v0.1.0", features = ["menu-raster"] }
+# SDL2's API on the system's SDL2 (sdl2-compat on SDL3), as DSlot does.
+sdl2 = "0.38"
+# localtime_r for the status bar's clock; statvfs for the room left.
+libc = "0.2"
+# The "Starting PortMaster..." picture for nibos-splash --hold: its format's LZ4 blocks, as
+# nibos-splash reads them (rootfs/splash).
+lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+panic = "abort"
+
+[dev-dependencies]
+# For the test that reads the Apps entry as DSlot does.
+nibkit = { git = "https://github.com/abradburne/nibkit", tag = "v0.1.0", features = ["menu-raster", "dslot"] }

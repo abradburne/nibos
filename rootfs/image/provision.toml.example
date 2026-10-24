@@ -1,0 +1,20 @@
+# provision.toml: the device's settings, read at the next start. Copy this file to
+# provision.toml (on this NIBOS partition), fill in what you want, and start the device.
+# It is applied, then erased from the card. If something in it is wrong, nothing is applied:
+# it is renamed provision.rejected-N.toml and provision.error.txt says why.
+# Every part is optional; leave a part out to keep what is set.
+
+# timezone = "Europe/London"
+
+# Which card holds games and saves: "auto" (a card in TF2 if there is one), "tf1", "tf2".
+# data_card = "auto"
+
+# [wifi]
+# ssid = "My network"
+# password = "the network password"        # leave out for an open network
+
+# [user]                                   # the user is "nibos"
+# password = "a password"                  # leave out for none: the screen logs in by itself
+
+# [ssh]                                    # SSH is off until there is a key
+# authorized_keys = ["ssh-ed25519 AAAA... me@my-computer"]

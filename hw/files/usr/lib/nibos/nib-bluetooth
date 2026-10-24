@@ -1,0 +1,22 @@
+#!/bin/sh
+# nib bluetooth: the Bluetooth radio on or off, leaving Wi-Fi as it is.
+#
+#   nib bluetooth on | off | status
+#
+# As `nib wifi` for Wi-Fi: off blocks the radio (rfkill), on unblocks it, first starting the
+# network if it isn't (`nib net up`, in the demand and deferred modes); BlueZ powers the
+# adapter on when it is unblocked. systemd keeps the setting across restarts, and
+# nibos-radios-restore brings the network up at boot for a radio left on. The wheel group may
+# run it (/dev/rfkill, 72-nibos-rfkill.rules). hw/README.md, "Network modes".
+set -eu
+case "${1:-status}" in
+on)
+    systemctl -q is-active nibos-network.target || /usr/lib/nibos/nib-net up
+    exec rfkill unblock bluetooth ;;
+off) exec rfkill block bluetooth ;;
+status)
+    if [ "$(rfkill list bluetooth -n -o SOFT 2>/dev/null | head -1)" = blocked ]; then echo off
+    elif [ -e /sys/class/bluetooth/hci0 ]; then echo on
+    else echo "off (the network isn't up: nib net up)"; fi ;;
+*) echo "usage: nib bluetooth on|off|status" >&2; exit 2 ;;
+esac

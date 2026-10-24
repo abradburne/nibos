@@ -1,0 +1,6 @@
+#!/bin/sh
+# nibos-hw: after a wake, check in the background that iwd reconnects (/usr/lib/nibos/
+# wifi-after-wake). Always exits 0: a failing hook must not stop the device from waking.
+[ "$1" = post ] && systemd-run --no-block --quiet --collect --unit=nibos-wifi-wake \
+    /usr/lib/nibos/wifi-after-wake >/dev/null 2>&1
+exit 0

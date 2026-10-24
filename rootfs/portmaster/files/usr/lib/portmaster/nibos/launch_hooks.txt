@@ -1,0 +1,45 @@
+#!/bin/bash
+# shellcheck disable=SC2154 # sourced by PortMaster and its ports, which use and set these
+#
+# SPDX-License-Identifier: MIT
+#
+# nibOS's launch hooks for utils/pm_launch.txt: no console to draw on, nothing run as root,
+# and DSlot reads the ports folder itself when PortMaster exits.
+
+## Autoinstall from PortMaster's own folder, and from Roms/PORTS/autoinstall only when the
+## user made one (pm_launch.txt would make it on the card otherwise).
+pm_hook_autoinstall_dirs() {
+  echo "$controlfolder/autoinstall"
+  [ -d "/$directory/ports/autoinstall" ] && echo "/$directory/ports/autoinstall"
+}
+
+## PortMaster's own app names its buttons A, B, X, Y as SDL does, by position (A the bottom
+## one), and its bar shows them so: on the DS+ the buttons are printed the other way round (A
+## right, B bottom). Give the app a mapping by the printed letters, so "A Accept" is the
+## button printed A, as in DSlot. Ports keep SDL's positions (control.txt).
+pm_hook_gui_env() {
+  export PYSDL2_DLL_PATH="/usr/lib"
+  local gui_db="$controlfolder/nibos/gamecontrollerdb-gui.txt"
+  sed -e 's/,a:b0,b:b1,x:b2,y:b3,/,a:b1,b:b0,x:b3,y:b2,/' "$SDL_GAMECONTROLLERCONFIG_FILE" > "$gui_db"
+  export SDL_GAMECONTROLLERCONFIG_FILE="$gui_db"
+  SDL_GAMECONTROLLERCONFIG="$(< "$gui_db")"
+  export SDL_GAMECONTROLLERCONFIG
+}
+
+## PortMaster's splash (LÖVE) would own the screens (DRM master) when pugwash opens them, and
+## a program that isn't root gets the screens only by opening them while no one has them: stop
+## the splash first (pmsplash.txt, sourced just before this, defines kill_splash).
+pm_hook_pre_launch() {
+  echo "Starting PortMaster."
+  kill_splash
+  wait "$PMSPLASH_PID" 2>/dev/null
+}
+
+pm_hook_post_launch() {
+  :
+}
+
+## pugwash leaves a marker for EmulationStation and friends; DSlot rescans by itself.
+pm_hook_frontend_refresh() {
+  rm -f "$controlfolder"/.*-refresh
+}

@@ -1,0 +1,14 @@
+# nibos-hw: when the charger switched the device on, charge asleep with the screens off until
+# the power key or the lid (the boot UI starts then) or an unplug (power off). It does nothing
+# on any other boot. /usr/bin/nibos-charge-boot, hw/daemons; hw/README.md, "Charging while off".
+[Unit]
+Description=Charging asleep after a charger power-on
+After=systemd-logind.service nibos-input.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nibos-charge-boot
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

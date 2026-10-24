@@ -1,0 +1,10 @@
+# nibos (rootfs/make-arch.sh): this start's logs written again now (bootlog now): when DSlot
+# fails (dslot.service.d/nibos-recovery.conf), so a crash is on the card even if the device
+# is then switched off by holding power.
+[Unit]
+Description=Save this start's logs to the ROMS volume now
+RequiresMountsFor=/mnt/roms
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/nibos/bootlog now

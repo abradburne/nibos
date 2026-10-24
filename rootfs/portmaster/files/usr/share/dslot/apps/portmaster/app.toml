@@ -1,0 +1,13 @@
+# PortMaster's own app on DSlot's Apps page and as the Ports page's first tile: browse and
+# install ports over Wi-Fi. nibOS doesn't ship PortMaster: until it is downloaded the entry is
+# "Get PortMaster", and /usr/bin/portmaster asks and gets it first (portmaster-get).
+name = "PortMaster"
+description = "Get more ports: browse and install them over Wi-Fi"
+command = ["/usr/bin/portmaster"]
+icon = "icon.png"
+runs_on = ["nibos"]
+
+[until]
+file = "~/.local/share/PortMaster/version"
+name = "Get PortMaster"
+description = "Download PortMaster to install ports over Wi-Fi"

@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 09:47:01 +0900
+Subject: [PATCH 103/103] measure: SPL load marks
+
+Not for use in a normal build: uboot/build.sh applies it with MEASURE=1.
+
+Marks SPL's FIT loading and SD reads, so the stash shows where SPL's
+time goes before TF-A.
+---
+ common/spl/spl_fit.c | 2 ++
+ common/spl/spl_mmc.c | 3 +++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/common/spl/spl_fit.c b/common/spl/spl_fit.c
+index 6966f2d2..5d087fae 100644
+--- a/common/spl/spl_fit.c
++++ b/common/spl/spl_fit.c
+@@ -12,6 +12,7 @@
+ #include <memalign.h>
+ #include <mapmem.h>
+ #include <spl.h>
++#include <bootstage.h>
+ #include <upl.h>
+ #include <sysinfo.h>
+ #include <asm/global_data.h>
+@@ -392,6 +393,7 @@ static int load_simple_fit(struct spl_load_info *info, ulong fit_offset,
+ 	if (CONFIG_IS_ENABLED(FIT_SIGNATURE)) {
+ 		printf("## Checking hash(es) for Image %s ... ",
+ 		       fit_get_name(fit, node, NULL));
++		bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "spl_hash_start");
+ 		if (!fit_image_verify_with_data(fit, node, gd_fdt_blob(), src,
+ 						length))
+ 			return -EPERM;
+diff --git a/common/spl/spl_mmc.c b/common/spl/spl_mmc.c
+index cc16709d..b6a94c15 100644
+--- a/common/spl/spl_mmc.c
++++ b/common/spl/spl_mmc.c
+@@ -9,6 +9,7 @@
+ #include <log.h>
+ #include <part.h>
+ #include <spl.h>
++#include <bootstage.h>
+ #include <spl_load.h>
+ #include <linux/compiler.h>
+ #include <errno.h>
+@@ -421,12 +422,14 @@ int spl_mmc_load(struct spl_image_info *spl_image,
+ 				return ret;
+ 		}
+ 
++		bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "spl_mmc_ready");
+ 		raw_sect = spl_mmc_get_uboot_raw_sector(mmc, raw_sect);
+ 
+ #ifdef CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_SECTOR
+ 		ret = mmc_load_image_raw_sector(spl_image, bootdev, mmc,
+ 						raw_sect +
+ 						spl_mmc_raw_uboot_offset(part));
++		bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "spl_fit_loaded");
+ 		if (!ret)
+ 			return 0;
+ #elif defined(CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_PARTITION) || \

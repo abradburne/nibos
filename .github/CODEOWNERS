@@ -1,0 +1,7 @@
+# Who reviews what. Every path is the maintainer's until others join; changes to the
+# bootloader, the boot chain and the board layer need their review in any case.
+*                @abradburne
+/uboot/          @abradburne
+/kernel/         @abradburne
+/boards/         @abradburne
+/socs/           @abradburne

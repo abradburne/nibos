@@ -1,0 +1,3 @@
+# nibos (a downloadable image): when a radio appears, keep it off on a fresh card
+# (/usr/lib/nibos/radios-first-off).
+ACTION=="add", SUBSYSTEM=="rfkill", ATTR{type}=="wlan|bluetooth", TAG+="systemd", ENV{SYSTEMD_WANTS}+="nibos-radios-first-off.service"

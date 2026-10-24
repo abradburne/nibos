@@ -1,0 +1,115 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 12:20:38 +0900
+Subject: [PATCH 1/4] i2c/mfd/regulator: rk3x, rk8xx: register at
+ subsys_initcall
+
+The RG DS+ SD controllers need the RK817 PMIC for vqmmc, and the
+Rockchip io-domain driver, which sets the SD pads to 1.8 V before UHS,
+needs it too. With the I2C controller, the rk8xx MFD and its regulators
+registered at device_initcall, the SD controllers probed first, deferred,
+and were only retried from late_initcall: the root card started 1.29 s
+into the kernel.
+
+Registering the three drivers at subsys_initcall brings the PMIC and its
+regulators up at ~0.17 s, before any device-level driver that uses them,
+and the SD controllers start at 0.26 s. The DTS change that goes with it
+drops the RG DS tree's vin-supply on the SD card's 3.3 V switches
+(vccio_sd is the 1.8 V UHS signalling rail, not their input; the stock
+tree gives them none).
+
+Upstream status: board-specific hack, not for upstream. Initcall-level
+reordering is the wrong tool for probe-order problems; fw_devlink or the
+deferred-probe retry timing are where a general fix would go.
+---
+ drivers/i2c/busses/i2c-rk3x.c       | 17 ++++++++++++++++-
+ drivers/mfd/rk8xx-i2c.c             | 17 ++++++++++++++++-
+ drivers/regulator/rk808-regulator.c | 17 ++++++++++++++++-
+ 3 files changed, 48 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/i2c/busses/i2c-rk3x.c b/drivers/i2c/busses/i2c-rk3x.c
+index fcede9f6e..a0fb81e59 100644
+--- a/drivers/i2c/busses/i2c-rk3x.c
++++ b/drivers/i2c/busses/i2c-rk3x.c
+@@ -1406,7 +1406,22 @@ static struct platform_driver rk3x_i2c_driver = {
+ 	},
+ };
+ 
+-module_platform_driver(rk3x_i2c_driver);
++/*
++ * subsys_initcall: the PMIC and its regulators have to be up before the
++ * device-level drivers that use them (SD controllers, io-domains) probe,
++ * because whatever defers is only retried from late_initcall.
++ */
++static int __init rk3x_i2c_init(void)
++{
++	return platform_driver_register(&rk3x_i2c_driver);
++}
++subsys_initcall(rk3x_i2c_init);
++
++static void __exit rk3x_i2c_exit(void)
++{
++	platform_driver_unregister(&rk3x_i2c_driver);
++}
++module_exit(rk3x_i2c_exit);
+ 
+ MODULE_DESCRIPTION("Rockchip RK3xxx I2C Bus driver");
+ MODULE_AUTHOR("Max Schwarz <max.schwarz@online.de>");
+diff --git a/drivers/mfd/rk8xx-i2c.c b/drivers/mfd/rk8xx-i2c.c
+index 2951b2911..71eae416b 100644
+--- a/drivers/mfd/rk8xx-i2c.c
++++ b/drivers/mfd/rk8xx-i2c.c
+@@ -275,7 +275,22 @@ static struct i2c_driver rk8xx_i2c_driver = {
+ 	.probe = rk8xx_i2c_probe,
+ 	.shutdown  = rk8xx_i2c_shutdown,
+ };
+-module_i2c_driver(rk8xx_i2c_driver);
++/*
++ * subsys_initcall: the PMIC and its regulators have to be up before the
++ * device-level drivers that use them (SD controllers, io-domains) probe,
++ * because whatever defers is only retried from late_initcall.
++ */
++static int __init rk8xx_i2c_init(void)
++{
++	return i2c_add_driver(&rk8xx_i2c_driver);
++}
++subsys_initcall(rk8xx_i2c_init);
++
++static void __exit rk8xx_i2c_exit(void)
++{
++	i2c_del_driver(&rk8xx_i2c_driver);
++}
++module_exit(rk8xx_i2c_exit);
+ 
+ MODULE_LICENSE("GPL");
+ MODULE_AUTHOR("Chris Zhong <zyw@rock-chips.com>");
+diff --git a/drivers/regulator/rk808-regulator.c b/drivers/regulator/rk808-regulator.c
+index 1e9561534..e4eb12f03 100644
+--- a/drivers/regulator/rk808-regulator.c
++++ b/drivers/regulator/rk808-regulator.c
+@@ -2193,7 +2193,22 @@ static struct platform_driver rk808_regulator_driver = {
+ 	},
+ };
+ 
+-module_platform_driver(rk808_regulator_driver);
++/*
++ * subsys_initcall: the PMIC and its regulators have to be up before the
++ * device-level drivers that use them (SD controllers, io-domains) probe,
++ * because whatever defers is only retried from late_initcall.
++ */
++static int __init rk808_regulator_init(void)
++{
++	return platform_driver_register(&rk808_regulator_driver);
++}
++subsys_initcall(rk808_regulator_init);
++
++static void __exit rk808_regulator_exit(void)
++{
++	platform_driver_unregister(&rk808_regulator_driver);
++}
++module_exit(rk808_regulator_exit);
+ 
+ MODULE_DESCRIPTION("Rockchip RK80x/RK81x PMIC series regulator driver");
+ MODULE_AUTHOR("Tony xie <tony.xie@rock-chips.com>");
+
+base-commit: 890ba68d38133061f470a7c4fa40db784ee0bd3d

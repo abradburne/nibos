@@ -1,0 +1,18 @@
+# nibos (a downloadable image; rootfs/image/): provision.toml from the card's NIBOS partition,
+# at every boot, before the network, SSH and the console (/usr/bin/nibos-provision, nibos-hw).
+[Unit]
+Description=Apply provision.toml
+DefaultDependencies=no
+RequiresMountsFor=/var/lib/nibos/state
+After=local-fs.target systemd-udev-settle.service
+Before=network-pre.target iwd.service sshd.socket getty@tty1.service dslot.service sysinit.target shutdown.target
+Wants=network-pre.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nibos-provision
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,11 @@
+# nibos-hw: Wi-Fi and Bluetooth, started on demand (nib net, hw/README.md).
+[Unit]
+Description=Network (Wi-Fi and Bluetooth)
+# Not part of the boot unless the system is set to start it: see `nib net`
+# and hw/README.md. Start it from anywhere with `systemctl start nibos-network.target`
+# or Wants=nibos-network.target in a unit that needs the network.
+Wants=iwd.service nibos-network-modules.service
+After=nibos-network-modules.service iwd.service
+
+[Install]
+WantedBy=multi-user.target

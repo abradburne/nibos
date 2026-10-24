@@ -1,0 +1,12 @@
+#!/bin/bash
+# shellcheck disable=SC1091 # sourced by PortMaster and its ports, which use and set these
+#
+# SPDX-License-Identifier: MIT
+#
+# Launches PortMaster: everything else lives in $controlfolder/utils/pm_launch.txt
+# and nibos/launch_hooks.txt.
+
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+controlfolder="$XDG_DATA_HOME/PortMaster"
+
+source "$controlfolder/utils/pm_launch.txt" nibos; exit $?

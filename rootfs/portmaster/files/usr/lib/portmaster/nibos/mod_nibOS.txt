@@ -1,0 +1,27 @@
+#!/bin/bash
+# shellcheck disable=SC2034 # sourced by PortMaster and its ports, which use and set these
+#
+# SPDX-License-Identifier: MIT
+#
+
+## Modular - nibOS
+#
+# A modular file that is sourced for specific script lines required by ports running on nibOS.
+#
+# usage `[ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"`
+
+## nibOS has no 32-bit (armhf) libraries: ports that need them aren't offered.
+
+# Use for Godot 2
+GODOT2_OPTS="-r ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT} -f"
+
+# Use for Godot 3+
+GODOT_OPTS="--resolution ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT} -f"
+
+pm_platform_helper() {
+    pm_message_close
+
+    if [ -e "$PM_PIPE" ]; then
+        PortMasterDialogExit
+    fi
+}

@@ -1,0 +1,15 @@
+# nibos-hw: the network at boot for a radio the user left on (/usr/lib/nibos/radios-restore),
+# in the demand and deferred modes; in the boot mode the network comes up anyway.
+[Unit]
+Description=Bring the network up for a radio left on
+After=multi-user.target getty@tty1.service
+
+[Service]
+# As nibos-network-deferred: simple, so it isn't part of the start-up, and at low priority.
+Type=simple
+Nice=19
+CPUWeight=1
+ExecStart=/usr/lib/nibos/radios-restore
+
+[Install]
+WantedBy=multi-user.target

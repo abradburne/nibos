@@ -1,0 +1,23 @@
+# nibos-hw: load the board's Wi-Fi and Bluetooth drivers (NIBOS_NETWORK_MODULES
+# in /usr/lib/nibos/board.conf) for nibos-network.target.
+[Unit]
+Description=Load the Wi-Fi and Bluetooth drivers
+PartOf=nibos-network.target
+# Early and off the main path in `boot` mode (enabled into sysinit.target), so the
+# drivers probe beside udev as they did when udev loaded them; started by the target
+# in the other modes.
+DefaultDependencies=no
+After=systemd-remount-fs.service
+Before=shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Blacklisted in the board's modprobe.d file so udev doesn't load them at boot.
+EnvironmentFile=/usr/lib/nibos/board.conf
+ExecStart=/usr/bin/modprobe -a $NIBOS_NETWORK_MODULES
+ExecStop=-/usr/bin/modprobe -r $NIBOS_NETWORK_MODULES
+
+[Install]
+WantedBy=sysinit.target

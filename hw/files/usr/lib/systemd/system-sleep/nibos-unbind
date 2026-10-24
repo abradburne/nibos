@@ -1,0 +1,30 @@
+#!/bin/sh
+# nibos-hw: devices that must not be suspended with the system are unbound
+# from their drivers before sleep and bound again after waking. The board's
+# description lists them (NIBOS_SLEEP_UNBIND in /usr/lib/nibos/board.conf,
+# "driver/device" each, unbound in that order and bound in the reverse); on the
+# RG DS+ the USB host controller, which hangs the kernel when it is suspended.
+# Plugged-in devices re-enumerate.
+#
+# Called by systemd-sleep with $1 = pre|post. No set -e, and always exit 0: a
+# failing hook must not stop the device from sleeping or waking.
+NIBOS_SLEEP_UNBIND=
+# shellcheck source=/dev/null
+. /usr/lib/nibos/board.conf 2>/dev/null
+
+drivers=/sys/bus/platform/drivers
+case "$1" in
+pre)
+    for d in $NIBOS_SLEEP_UNBIND; do
+        [ -e "$drivers/$d" ] && echo "${d#*/}" > "$drivers/${d%/*}/unbind"
+    done
+    ;;
+post)
+    reversed=
+    for d in $NIBOS_SLEEP_UNBIND; do reversed="$d $reversed"; done
+    for d in $reversed; do
+        [ -e "$drivers/$d" ] || echo "${d#*/}" > "$drivers/${d%/*}/bind"
+    done
+    ;;
+esac
+exit 0

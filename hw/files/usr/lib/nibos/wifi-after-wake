@@ -1,0 +1,18 @@
+#!/bin/sh
+# nibos-hw: after a wake, make sure iwd isn't stuck. Asleep in the middle of a connection (the
+# lid closed a second after Wi-Fi came on), the association is aborted in suspend and iwd stays
+# "connecting" for good: nothing reconnects until it restarts (seen 2026-10-21). Give it 20 s;
+# if it's still connecting, restart iwd, which connects again. Started in the background by the
+# sleep hook (system-sleep/nibos-wifi-wake), so the wake never waits for it.
+[ -d /sys/class/net/wlan0 ] && systemctl -q is-active iwd.service || exit 0
+state=
+for _ in $(seq 20); do
+    state=$(iwctl station wlan0 show 2>/dev/null | awk '/ State /{ print $2 }')
+    [ "$state" = connected ] && exit 0
+    sleep 1
+done
+if [ "$state" = connecting ]; then
+    echo "iwd still connecting 20 s after waking: restarting it"
+    systemctl restart iwd.service
+fi
+exit 0

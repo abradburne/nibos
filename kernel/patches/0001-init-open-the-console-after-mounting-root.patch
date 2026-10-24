@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 12:20:38 +0900
+Subject: [PATCH 1/3] init: open the console after mounting root
+
+console_on_rootfs() opens /dev/console before the root file system is
+mounted and takes console_lock to do so. fbcon holds that lock while its
+takeover's modeset powers the panels on, so on the RG DS+ the root mount
+waited for both screens to come up (~0.33 s of panel sequence).
+
+Open the console after prepare_namespace() instead: the mount (~85 ms
+with rootfstype=ext4) now overlaps the panels, and init starts when fbcon
+lets go of the console, 0.66-0.72 s into the kernel.
+
+Upstream status: board-specific hack, not for upstream. It changes when
+/dev/console exists for every system, which an initramfs-less boot of
+this one board doesn't need but others may.
+---
+ init/main.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/init/main.c b/init/main.c
+index 31f2bf549..7213df1c9 100644
+--- a/init/main.c
++++ b/init/main.c
+@@ -1677,7 +1677,6 @@ static noinline void __init kernel_init_freeable(void)
+ 	kunit_run_all_tests();
+ 
+ 	wait_for_initramfs();
+-	console_on_rootfs();
+ 
+ 	/*
+ 	 * check if there is an early userspace init.  If yes, let it do all
+@@ -1693,6 +1692,14 @@ static noinline void __init kernel_init_freeable(void)
+ 		prepare_namespace();
+ 	}
+ 
++	/*
++	 * After the root mount, not before: opening the console takes
++	 * console_lock, which fbcon holds while its takeover powers the panels
++	 * on. Opened first, it kept the root file system from being mounted
++	 * until the screens were up; now the mount overlaps them.
++	 */
++	console_on_rootfs();
++
+ 	/*
+ 	 * Ok, we have completed the initial bootup, and
+ 	 * we're essentially up and running. Get rid of the
+
+base-commit: 0fcb05b72344f40806cbe810de8872f1698bf053

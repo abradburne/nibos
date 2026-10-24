@@ -1,0 +1,15 @@
+# nibos-hw: confirm the running A/B slot once its boot UI is up (docs/design/ab-rollback.md):
+# the splash has seen both screens taken over (at most 2 minutes' wait, for a boot without it),
+# and 30 s later DSlot, if it's the boot UI, is still running rather than in the safe mode.
+# Until then SPL counts this boot as one of the slot's tries. Nothing to do on a confirmed slot,
+# or a card with no boot control block.
+[Unit]
+Description=Confirm the running slot once the boot UI is up
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nibos-bootctl confirm-when-up
+
+[Install]
+WantedBy=multi-user.target

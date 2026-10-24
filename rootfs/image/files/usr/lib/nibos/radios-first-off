@@ -1,0 +1,21 @@
+#!/bin/sh
+# nibos (a downloadable image; rootfs/image/): Wi-Fi and Bluetooth start off on a fresh card,
+# until each is switched on (DSlot's switches, `nib wifi on`, `nib bluetooth on`) or, for
+# Wi-Fi, provision.toml names a network. Run when a radio appears
+# (nibos-radios-first-off.service). Once a radio has been switched either way, systemd-rfkill
+# keeps that choice in /var/lib/systemd/rfkill/ and puts it back at every start, and this
+# leaves it be; a known network (provision.toml's [wifi], written before this runs) means
+# Wi-Fi is wanted.
+saved() { ls /var/lib/systemd/rfkill/*:"$1" >/dev/null 2>&1; }
+present() { grep -qx "$1" /sys/class/rfkill/rfkill*/type 2>/dev/null; }
+if present wlan && ! saved wlan &&
+    ! ls /var/lib/nibos/state/iwd/*.psk /var/lib/nibos/state/iwd/*.open \
+        /var/lib/nibos/state/iwd/*.8021x >/dev/null 2>&1; then
+    echo "nibos: Wi-Fi off until it is switched on (a fresh card)"
+    rfkill block wlan
+fi
+if present bluetooth && ! saved bluetooth; then
+    echo "nibos: Bluetooth off until it is switched on (a fresh card)"
+    rfkill block bluetooth
+fi
+exit 0

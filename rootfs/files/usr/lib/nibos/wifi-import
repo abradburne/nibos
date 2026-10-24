@@ -1,0 +1,11 @@
+#!/bin/sh
+# nibos (rootfs/make-arch.sh): copy iwd network files (NAME.psk, NAME.open)
+# from the card's ROMS/nibos/wifi/ into iwd, at every start
+# (nibos-wifi-import.service; docs/using.md, "Wi-Fi").
+src=/mnt/roms/nibos/wifi
+[ -d "$src" ] || exit 0
+install -d -m700 /var/lib/iwd
+for f in "$src"/*.psk "$src"/*.open; do
+    [ -f "$f" ] && install -m600 "$f" /var/lib/iwd/
+done
+exit 0

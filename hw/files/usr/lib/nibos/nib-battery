@@ -1,0 +1,77 @@
+#!/bin/sh
+# nib battery: the battery's charge, and battery protect (stop charging at about 80%)
+#
+#   nib battery                  charge, status, battery protect
+#   nib battery protect on|off   from now on, kept across restarts (the wheel group may)
+#   nib battery add NAME         for udev, as root: a power supply appeared
+#
+# Battery protect lowers the charge voltage to NIBOS_BATTERY_PROTECT_UV (4.1 V on the RG DS+),
+# at which the cell stops at about 80-85% and the charger starts again on its own a little
+# lower; the battery stays connected, as at a full charge, and the charge LED stays on while
+# plugged in. It is the battery's constant_charge_voltage in the kernel (the rk817 patch);
+# off sets it back to constant_charge_voltage_max. docs/engineering/battery.md.
+set -eu
+run=/run/nibos
+state=/var/lib/nibos/battery/protect
+# shellcheck source=/dev/null
+. /usr/lib/nibos/board.conf
+# shellcheck source=/dev/null
+[ ! -r /etc/nibos/board.conf ] || . /etc/nibos/board.conf
+set -- "${@:-status}"
+
+# Battery protect on or off, in the kernel.
+apply() {
+    b=$run/battery
+    if [ "$1" = on ]; then
+        echo "$NIBOS_BATTERY_PROTECT_UV" > "$b/constant_charge_voltage"
+    else
+        cat "$b/constant_charge_voltage_max" > "$b/constant_charge_voltage"
+    fi
+}
+
+case "$1" in
+add)
+    [ $# -eq 2 ] || exit 2
+    sys=/sys/class/power_supply/$2
+    case "$2" in
+    "${NIBOS_CHARGER:-}") mkdir -p "$run" && ln -sfn "$sys" "$run/charger" ;;
+    "${NIBOS_BATTERY:-}")
+        mkdir -p "$run" && ln -sfn "$sys" "$run/battery"
+        f=$sys/constant_charge_voltage
+        [ -e "$f" ] || exit 0 # a kernel without the rk817 patch
+        chgrp wheel "$f" && chmod 664 "$f"
+        [ "$(cat "$state" 2>/dev/null)" != on ] || apply on
+        ;;
+    esac
+    ;;
+status)
+    b=$run/battery
+    [ -e "$b/capacity" ] || { echo "nib battery: no battery" >&2; exit 1; }
+    echo "charge:  $(cat "$b/capacity")% ($(cat "$b/status"))"
+    if [ -e "$b/constant_charge_voltage" ] &&
+        [ "$(cat "$b/constant_charge_voltage")" -lt "$(cat "$b/constant_charge_voltage_max")" ]; then
+        echo "protect: on (charges to $(( $(cat "$b/constant_charge_voltage") / 1000 )) mV, about 80-85%)"
+    else
+        echo "protect: off"
+    fi
+    ;;
+protect)
+    [ -e "$run/battery/constant_charge_voltage" ] ||
+        { echo "nib battery: this kernel has no battery protect (docs/engineering/battery.md)" >&2; exit 1; }
+    case "${2:-}" in
+    on | off)
+        # Saved first, by replacing the file (whoever made the last one: the directory is
+        # wheel's), so a failed save changes nothing rather than coming back at the next boot.
+        tmp=$(mktemp "$state.XXXXXX")
+        if ! { echo "$2" > "$tmp" && chmod 664 "$tmp" && mv -f "$tmp" "$state"; }; then
+            rm -f "$tmp"
+            exit 1
+        fi
+        apply "$2"
+        echo "protect: $2"
+        ;;
+    *) echo "usage: nib battery protect on|off" >&2; exit 2 ;;
+    esac
+    ;;
+*) echo "usage: nib battery [protect on|off]" >&2; exit 2 ;;
+esac

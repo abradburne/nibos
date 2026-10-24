@@ -1,0 +1,18 @@
+# nibos (rootfs/make-arch.sh): this start's logs written again at power-off and restart, with
+# everything since the snapshot 20 s in (bootlog now). Nothing runs at boot. Stopped after the
+# boot UI and the safe mode (After=: units stop in the reverse order), so their last words are
+# in it, and before the ROMS volume is unmounted (RequiresMountsFor=).
+[Unit]
+Description=Save this start's logs to the ROMS volume at power-off
+RequiresMountsFor=/mnt/roms
+After=dslot.service nibos-safe-mode.service getty@tty1.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/usr/lib/nibos/bootlog now
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

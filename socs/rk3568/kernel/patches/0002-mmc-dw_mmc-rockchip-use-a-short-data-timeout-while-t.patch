@@ -1,0 +1,110 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 12:20:38 +0900
+Subject: [PATCH 2/4] mmc: dw_mmc-rockchip: use a short data timeout while
+ tuning
+
+SDR104 tuning of the RG DS+ root card took 0.03-0.51 s, varying from boot
+to boot. A sample phase whose tuning block never arrives (rather than
+arriving with a CRC error) waits for the data timeout, which the core
+sets to 150 ms and the controller caps at 0xffffff card clocks, 112 ms at
+150 MHz; a few such phases cost the boot half a second.
+
+The SD specification has a card answer 40 tuning commands within 150 ms,
+so while dw_mci_rk3288_execute_tuning() walks the phases, cap the data
+timeout at 10 ms through a set_data_timeout hook that otherwise matches
+dw_mci_set_data_timeout(). Tuning now takes 24-100 ms.
+
+Upstream status: candidate.
+---
+ drivers/mmc/host/dw_mmc-rockchip.c | 42 ++++++++++++++++++++++++++++++
+ 1 file changed, 42 insertions(+)
+
+diff --git a/drivers/mmc/host/dw_mmc-rockchip.c b/drivers/mmc/host/dw_mmc-rockchip.c
+index 75c82ff20..58ec09263 100644
+--- a/drivers/mmc/host/dw_mmc-rockchip.c
++++ b/drivers/mmc/host/dw_mmc-rockchip.c
+@@ -38,6 +38,7 @@ struct dw_mci_rockchip_priv_data {
+ 	bool			internal_phase;
+ 	int                     sample_phase;
+ 	int                     drv_phase;
++	bool			tuning;
+ };
+ 
+ /*
+@@ -293,6 +294,43 @@ static void dw_mci_rk3288_set_ios(struct dw_mci *host, struct mmc_ios *ios)
+ #define TUNING_ITERATION_TO_PHASE(i, num_phases) \
+ 		(DIV_ROUND_UP((i) * 360, num_phases))
+ 
++/*
++ * The core gives each tuning command 150 ms, which the controller caps at
++ * 0xffffff clocks: 112 ms at 150 MHz. A phase whose tuning block never
++ * arrives (rather than arriving with a CRC error) waits all of it, and a few
++ * of those cost the SDR104 card half a second at boot. The SD spec has a card
++ * answer 40 tuning commands within 150 ms, so 10 ms is still ample.
++ */
++#define DW_MCI_ROCKCHIP_TUNING_TIMEOUT_NS	(10 * NSEC_PER_MSEC)
++
++static void dw_mci_rk3288_set_data_timeout(struct dw_mci *host,
++					   unsigned int timeout_ns)
++{
++	struct dw_mci_rockchip_priv_data *priv = host->priv;
++	u32 clk_div, tmout;
++	u64 tmp;
++
++	if (priv->tuning)
++		timeout_ns = min_t(unsigned int, timeout_ns,
++				   DW_MCI_ROCKCHIP_TUNING_TIMEOUT_NS);
++
++	/* As dw_mci_set_data_timeout() */
++	clk_div = (mci_readl(host, CLKDIV) & 0xFF) * 2;
++	if (clk_div == 0)
++		clk_div = 1;
++
++	tmp = DIV_ROUND_UP_ULL((u64)timeout_ns * host->bus_hz, NSEC_PER_SEC);
++	tmp = DIV_ROUND_UP_ULL(tmp, clk_div);
++
++	tmout = 0xFF; /* RESPONSE_TIMEOUT: maximum */
++	if (!tmp || tmp > 0xFFFFFF)
++		tmout |= (0xFFFFFF << 8);
++	else
++		tmout |= (tmp & 0xFFFFFF) << 8;
++
++	mci_writel(host, TMOUT, tmout);
++}
++
+ static int dw_mci_rk3288_execute_tuning(struct dw_mci *host, u32 opcode)
+ {
+ 	struct dw_mci_rockchip_priv_data *priv = host->priv;
+@@ -321,6 +359,7 @@ static int dw_mci_rk3288_execute_tuning(struct dw_mci *host, u32 opcode)
+ 		return -ENOMEM;
+ 
+ 	/* Try each phase and extract good ranges */
++	priv->tuning = true;
+ 	for (i = 0; i < priv->num_phases; ) {
+ 		rockchip_mmc_set_phase(host, true,
+ 				       TUNING_ITERATION_TO_PHASE(
+@@ -357,6 +396,7 @@ static int dw_mci_rk3288_execute_tuning(struct dw_mci *host, u32 opcode)
+ 
+ 		prev_v = v;
+ 	}
++	priv->tuning = false;
+ 
+ 	if (range_count == 0) {
+ 		dev_warn(host->dev, "All phases bad!");
+@@ -537,6 +577,7 @@ static const struct dw_mci_drv_data rk3288_drv_data = {
+ 	.common_caps		= MMC_CAP_CMD23,
+ 	.set_ios		= dw_mci_rk3288_set_ios,
+ 	.execute_tuning		= dw_mci_rk3288_execute_tuning,
++	.set_data_timeout	= dw_mci_rk3288_set_data_timeout,
+ 	.parse_dt		= dw_mci_rk3288_parse_dt,
+ 	.init			= dw_mci_rockchip_init,
+ };
+@@ -545,6 +586,7 @@ static const struct dw_mci_drv_data rk3576_drv_data = {
+ 	.common_caps		= MMC_CAP_CMD23,
+ 	.set_ios		= dw_mci_rk3288_set_ios,
+ 	.execute_tuning		= dw_mci_rk3288_execute_tuning,
++	.set_data_timeout	= dw_mci_rk3288_set_data_timeout,
+ 	.parse_dt		= dw_mci_rk3576_parse_dt,
+ 	.init			= dw_mci_rockchip_init,
+ };

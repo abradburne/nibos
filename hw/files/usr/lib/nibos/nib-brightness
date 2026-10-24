@@ -1,0 +1,17 @@
+#!/bin/sh
+# nib brightness: each screen's brightness, in percent.
+#
+#   nib brightness                        every screen's level
+#   nib brightness SCREEN|all             one screen's (top, bottom on the RG DS+)
+#   nib brightness SCREEN|all PERCENT     set it (0-100; 0 is a dim floor, never off), and keep it
+#   nib brightness SCREEN|all +N|-N       move it by N percent
+#
+# Percent is perceptual: equal steps look equal. Needs the video group or root.
+# Menu + volume up/down does `all +5` / `all -5` from anywhere. hw/README.md,
+# "Brightness".
+set -eu
+case $# in
+0 | 1) exec /usr/bin/nibos-backlight get "${1:-all}" ;;
+2) exec /usr/bin/nibos-backlight set "$1" "$2" ;;
+*) echo "usage: nib brightness [SCREEN|all [PERCENT|+N|-N]]" >&2; exit 2 ;;
+esac

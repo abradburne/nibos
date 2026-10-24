@@ -1,0 +1,158 @@
+# nibos: Mesa with only the RG DS+'s GPU (Mali-G52, Panfrost) and no LLVM at run time.
+# Based on Arch Linux ARM's extra/mesa 1:26.2.4-1 (see README.md for what changed).
+
+pkgbase=mesa-nibos
+pkgname=(mesa-nibos vulkan-panfrost-nibos)
+pkgver=26.2.4
+_pkgver=${pkgver/[a-z]/-&}
+pkgrel=2
+epoch=1
+pkgdesc="Mesa OpenGL/GLES/EGL/GBM for nibOS: Panfrost only, no LLVM"
+url="https://www.mesa3d.org/"
+arch=(aarch64)
+license=("MIT AND BSD-3-Clause AND SGI-B-2.0")
+makedepends=(
+  # Build-time only: Panfrost's internal shaders are OpenCL C compiled by mesa_clc
+  # (clang + LLVM + libclc), but nothing at run time links LLVM.
+  clang
+  libclc
+  llvm
+  spirv-llvm-translator
+
+  expat
+  glibc
+  libdisplay-info
+  libdrm
+  libelf
+  libglvnd
+  libx11
+  libxcb
+  libxext
+  libxml2
+  libxrandr
+  libxshmfence
+  libxxf86vm
+  lm_sensors
+  spirv-tools
+  systemd-libs
+  wayland
+  xcb-util-keysyms
+  zlib
+  zstd
+
+  cmake
+  elfutils
+  glslang
+  meson
+  python-mako
+  python-packaging
+  python-ply
+  python-pycparser
+  python-yaml
+  wayland-protocols
+  xorgproto
+)
+options=(!lto)
+source=("https://archive.mesa3d.org/mesa-$_pkgver.tar.xz")
+sha256sums=('bce5f7fbebb934373b86c999a064d52fb5065878dc57f287f95346648ec832e9')
+
+prepare() {
+  cd mesa-$_pkgver
+  # Same scheme as Arch ("-arch1.1"), marked as ours.
+  echo "$_pkgver-nibos$epoch.$pkgrel" >VERSION
+}
+
+build() {
+  # Stage 1: mesa_clc and vtn_bindgen2, the build-time compiler for Panfrost's internal
+  # OpenCL C shaders. They need LLVM; the driver built below does not.
+  meson setup --prefix /usr --buildtype plain --auto-features disabled --wrap-mode nodownload \
+    mesa-$_pkgver build-clc \
+    -D gallium-drivers= -D vulkan-drivers= -D platforms= \
+    -D glx=disabled -D egl=disabled -D gbm=disabled \
+    -D opengl=false -D gles1=disabled -D gles2=disabled \
+    -D llvm=enabled -D shared-llvm=enabled -D spirv-tools=enabled \
+    -D mesa-clc=enabled -D install-mesa-clc=true
+  meson compile -C build-clc
+  rm -rf clc-tools
+  DESTDIR="$srcdir/clc-tools" meson install -C build-clc --no-rebuild
+  export PATH="$srcdir/clc-tools/usr/bin:$PATH"
+
+  # Stage 2: the driver, using the tools from stage 1 (-D mesa-clc=system).
+  local meson_options=(
+    --optimization 2
+    -D b_ndebug=true
+    -D android-libbacktrace=disabled
+    -D gallium-drivers=panfrost
+    -D vulkan-drivers=panfrost
+    -D vulkan-layers=
+    -D llvm=disabled
+    -D mesa-clc=system
+    -D spirv-tools=disabled
+    -D gallium-mediafoundation=disabled
+    -D gallium-rusticl=false
+    -D gallium-va=disabled
+    -D video-codecs=
+    -D teflon=false
+    -D gles1=disabled
+    -D intel-rt=disabled
+    -D html-docs=disabled
+    -D libunwind=disabled
+    -D microsoft-clc=disabled
+    -D valgrind=disabled
+  )
+
+  arch-meson mesa-$_pkgver build "${meson_options[@]}"
+  meson compile -C build
+}
+
+package_mesa-nibos() {
+  depends=(
+    expat
+    glibc
+    libdrm
+    libelf
+    libgcc
+    libglvnd
+    libstdc++
+    libx11
+    libxcb
+    libxext
+    libxshmfence
+    libxxf86vm
+    lm_sensors
+    wayland
+    zlib
+    zstd
+  )
+  provides=(
+    "mesa=$epoch:$pkgver-$pkgrel"
+    "mesa-libgl=$epoch:$pkgver-$pkgrel"
+    opengl-driver
+  )
+  conflicts=(mesa mesa-libgl)
+
+  meson install -C build --destdir "$pkgdir" --no-rebuild
+
+  # PanVK goes in vulkan-panfrost-nibos.
+  rm -rf "$srcdir/vk-split" && mkdir -p "$srcdir/vk-split"
+  mv "$pkgdir"/usr/lib/libvulkan_panfrost.so "$srcdir/vk-split/"
+  mv "$pkgdir"/usr/share/vulkan "$srcdir/vk-split/"
+
+  # indirect rendering, as Arch does
+  ln -sr "$pkgdir"/usr/lib/libGLX_{mesa,indirect}.so.0
+
+  install -Dm644 mesa-$_pkgver/docs/license.rst -t "$pkgdir/usr/share/licenses/$pkgname"
+}
+
+# PanVK, Mesa's Vulkan driver for Mali. On the G52 (Bifrost, v7) it is not conformant and only
+# starts with PAN_I_WANT_A_BROKEN_VULKAN_DRIVER=1. Built for emulators that try a Vulkan path.
+package_vulkan-panfrost-nibos() {
+  pkgdesc="Mesa's Vulkan driver for Mali (PanVK), for nibOS"
+  depends=(libdrm libelf libgcc libstdc++ wayland libx11 libxcb libxshmfence xcb-util-keysyms libdisplay-info zlib zstd expat vulkan-icd-loader)
+  provides=(vulkan-driver vulkan-panfrost)
+  conflicts=(vulkan-panfrost)
+  install -Dm755 "$srcdir/vk-split/libvulkan_panfrost.so" "$pkgdir/usr/lib/libvulkan_panfrost.so"
+  mkdir -p "$pkgdir/usr/share"
+  cp -r "$srcdir/vk-split/vulkan" "$pkgdir/usr/share/"
+  install -Dm644 mesa-$_pkgver/docs/license.rst -t "$pkgdir/usr/share/licenses/$pkgname"
+}

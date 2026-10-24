@@ -1,0 +1,19 @@
+# nibos (experiment, not installed; copy it by hand with @NIBOS_UID@ filled in):
+# the ROMS partition mounted as early as possible, at /run/nibos/roms, for a launcher that
+# lists games at power-on. /mnt/roms is an automount whose device unit waits for udev's coldplug
+# (~1 s at boot); this finds the partition by its label itself and mounts it straight away. The
+# same file system is mounted at /mnt/roms later as before (vfat shares one superblock).
+[Unit]
+Description=Mount the ROMS partition early for the launcher
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'mkdir -p /run/nibos/roms && exec mount -t vfat -o noatime,uid=@NIBOS_UID@,gid=@NIBOS_UID@,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro "$(blkid -L ROMS)" /run/nibos/roms'
+ExecStop=/usr/bin/umount /run/nibos/roms
+
+[Install]
+WantedBy=sysinit.target

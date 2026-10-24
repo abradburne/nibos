@@ -1,0 +1,9 @@
+# PortMaster's ports, for DSlot's Ports page (rootfs/portmaster in nibOS). Each port is a script
+# in Roms/PORTS; run-port starts it as nibOS needs and stops all of it on SIGTERM. Ports keep
+# their own saves in their folders, so no {saves}.
+name = "PortMaster"
+priority = 100
+requires = ["/usr/lib/portmaster/run-port"]
+
+[systems]
+PORTS = ["/usr/lib/portmaster/run-port", "{rom}"]

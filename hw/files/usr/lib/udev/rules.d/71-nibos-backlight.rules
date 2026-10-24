@@ -1,0 +1,5 @@
+# nibos-hw: every backlight gets the screen name the board gives it
+# (NIBOS_BACKLIGHTS in /usr/lib/nibos/board.conf) as /run/nibos/backlight/<screen>,
+# write access for the video group (the boot UI and the console user are in it),
+# and its saved level back (nibos-backlight; hw/README.md, "Brightness").
+ACTION=="add", SUBSYSTEM=="backlight", RUN+="/usr/bin/nibos-backlight add %k"

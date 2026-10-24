@@ -1,0 +1,51 @@
+# nibOS: build the kernel and U-Boot for the board, natively on an arm64 runner, from the
+# pinned sources (config.sh), and keep the outputs. Started by hand (workflow_dispatch). The
+# scripts are made for an Arch Linux ARM build machine (docs/building.md) and this runs them on
+# Ubuntu, so the package list may need adjusting.
+name: build
+
+on:
+  workflow_dispatch:
+    inputs:
+      board:
+        description: Board (a directory under boards/ with a board.sh)
+        default: rg-ds-plus
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    env:
+      NIBOS_BOARD: ${{ inputs.board }}
+      KSRC: ${{ github.workspace }}/../linux
+      USRC: ${{ github.workspace }}/../u-boot
+      RKBIN: ${{ github.workspace }}/../rkbin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libgnutls28-dev uuid-dev \
+              dwarves cpio kmod zstd python3-pyelftools python3-setuptools swig device-tree-compiler \
+              u-boot-tools
+      - name: Kernel source at KERNEL_COMMIT
+        run: |
+          . ./config.sh
+          git init -q "$KSRC"
+          git -C "$KSRC" fetch -q --depth 1 https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git "$KERNEL_COMMIT"
+          git -C "$KSRC" checkout -q FETCH_HEAD
+      - name: Kernel
+        run: bash kernel/build.sh
+      - name: U-Boot (proper, fallback, Falcon SPL)
+        run: |
+          bash uboot/build.sh
+          FALLBACK=1 bash uboot/build.sh
+          FALCON=1 bash uboot/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nibos-${{ inputs.board }}
+          path: |
+            kernel/out/
+            uboot/out/

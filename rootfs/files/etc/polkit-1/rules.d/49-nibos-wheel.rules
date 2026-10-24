@@ -1,0 +1,5 @@
+// nibos (rootfs/make-arch.sh): users have no passwords, so wheel needs none
+// for polkit either, as for sudo.
+polkit.addRule(function(action, subject) {
+    if (subject.isInGroup("wheel")) return polkit.Result.YES;
+});

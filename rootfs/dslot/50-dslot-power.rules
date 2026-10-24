@@ -1,0 +1,11 @@
+// nibos (rootfs/dslot): DSlot runs as @NIBOS_USER@ from dslot.service, outside any login
+// session, so logind asks polkit whether it may sleep, restart or power off, and without this
+// the answer is "interactive authentication required". DSlot's power menu has all three.
+polkit.addRule(function(action, subject) {
+    if (subject.user == "@NIBOS_USER@" &&
+        (action.id.indexOf("org.freedesktop.login1.power-off") == 0 ||
+         action.id.indexOf("org.freedesktop.login1.reboot") == 0 ||
+         action.id.indexOf("org.freedesktop.login1.suspend") == 0)) {
+        return polkit.Result.YES;
+    }
+});

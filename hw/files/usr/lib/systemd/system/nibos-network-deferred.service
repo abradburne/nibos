@@ -1,0 +1,16 @@
+# nibos-hw: network mode "deferred" (nib net mode deferred): start
+# nibos-network.target once the system has finished starting.
+[Unit]
+Description=Bring the network up once the system has started
+After=multi-user.target getty@tty1.service
+
+[Service]
+# Simple, so it isn't part of the start-up: it waits for the start-up to finish,
+# then starts the network at low priority beside whatever the user is doing.
+Type=simple
+Nice=19
+CPUWeight=1
+ExecStart=/bin/sh -c 'while [ "$(systemctl is-system-running)" = starting ]; do sleep 0.2; done; exec systemctl start nibos-network.target'
+
+[Install]
+WantedBy=multi-user.target

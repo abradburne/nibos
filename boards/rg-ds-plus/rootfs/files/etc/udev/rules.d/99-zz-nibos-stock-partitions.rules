@@ -1,0 +1,7 @@
+# nibos (boards/rg-ds-plus/rootfs): the dev card keeps the stock OS's ten
+# partitions, each with ~10 /dev/disk links, so they are half of the 223 device
+# units PID 1 builds during coldplug and that the user manager enumerates again
+# before the console's login can finish. Nothing mounts them through systemd
+# (scripts use /dev/mmcblk0pN and sysfs), so keep them out of it: device nodes
+# and links stay.
+SUBSYSTEM=="block", KERNEL=="mmcblk*", ENV{PARTNAME}=="uboot|misc|boot|recovery|backup|rootfs|ports|vendor|oem|userdata", TAG-="systemd"

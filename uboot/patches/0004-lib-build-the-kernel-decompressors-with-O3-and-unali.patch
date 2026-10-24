@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 16 Oct 2026 09:02:45 +0900
+Subject: [PATCH 4/4] lib: build the kernel decompressors with -O3 and
+ unaligned access
+
+U-Boot builds everything with -Os, and arm64 with -mstrict-align. The
+decompressors unpack the kernel at every boot, in U-Boot proper with the
+MMU on, where unaligned access is fine: with the defaults LZ4 ran at
+50 MB/s and zstd at 16 MB/s on the RK3568.
+
+Build gunzip, zlib, LZ4 and zstd with -O3 -mno-strict-align.
+
+Upstream status: board-specific hack, not for upstream: unaligned access
+is not safe in every phase on every arm64 board (SPL or MMU off). A
+per-board Kconfig option could carry it.
+---
+ lib/Makefile      | 5 +++++
+ lib/zlib/Makefile | 1 +
+ lib/zstd/Makefile | 1 +
+ 3 files changed, 7 insertions(+)
+
+diff --git a/lib/Makefile b/lib/Makefile
+index 222378a8..7498675a 100644
+--- a/lib/Makefile
++++ b/lib/Makefile
+@@ -93,6 +93,11 @@ obj-$(CONFIG_$(PHASE_)GZIP) += gunzip.o
+ obj-$(CONFIG_$(PHASE_)LZO) += lzo/
+ obj-$(CONFIG_$(PHASE_)LZMA) += lzma/
+ obj-$(CONFIG_$(PHASE_)LZ4) += lz4_wrapper.o
++# Built for speed, unaligned access allowed: these unpack the kernel at
++# every boot, in U-Boot proper with the MMU on. -Os and -mstrict-align made
++# LZ4 run at 50 MB/s and zstd at 16 MB/s.
++CFLAGS_lz4_wrapper.o += -O3 -mno-strict-align
++CFLAGS_gunzip.o += -O3 -mno-strict-align
+ 
+ obj-$(CONFIG_$(PHASE_)LIB_RATIONAL) += rational.o
+ 
+diff --git a/lib/zlib/Makefile b/lib/zlib/Makefile
+index 4a3e985a..cedf708c 100644
+--- a/lib/zlib/Makefile
++++ b/lib/zlib/Makefile
+@@ -4,3 +4,4 @@
+ # Wolfgang Denk, DENX Software Engineering, wd@denx.de.
+ 
+ obj-y += zlib.o
++ccflags-y += -O3 -mno-strict-align
+diff --git a/lib/zstd/Makefile b/lib/zstd/Makefile
+index 2003e184..7d2a28bd 100644
+--- a/lib/zstd/Makefile
++++ b/lib/zstd/Makefile
+@@ -9,6 +9,7 @@
+ # You may select, at your option, one of the above-listed licenses.
+ # ################################################################
+ obj-y += zstd_decompress.o
++ccflags-y += -O3 -mno-strict-align
+ obj-y += zstd_common.o
+ 
+ ifeq ($(CONFIG_ZSTD_LIB_MINIFY),y)

@@ -1,0 +1,4 @@
+# nibos-hw: the board's battery and charger (NIBOS_BATTERY, NIBOS_CHARGER in
+# /usr/lib/nibos/board.conf) as /run/nibos/battery and /run/nibos/charger, battery protect's
+# thresholds writable by the wheel group, and the saved setting back (nib-battery).
+ACTION=="add", SUBSYSTEM=="power_supply", RUN+="/usr/lib/nibos/nib-battery add %k"
