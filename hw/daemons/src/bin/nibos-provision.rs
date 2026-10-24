@@ -169,6 +169,12 @@ fn access(state: &Path) -> io::Result<()> {
 
 fn provision_file(boot: &Path, state: &Path) -> io::Result<()> {
     let file = boot.join("provision.toml");
+    // A Mac leaves "._provision.toml" (AppleDouble: the file's extended attributes) beside it
+    // on a FAT volume. nibOS never reads it; wiped with the file it belongs to.
+    let apple = boot.join("._provision.toml");
+    if apple.exists() && !file.exists() {
+        let _ = wipe(&apple);
+    }
     if !file.exists() {
         return Ok(());
     }
@@ -177,6 +183,9 @@ fn provision_file(boot: &Path, state: &Path) -> io::Result<()> {
         Ok(p) => {
             apply(&p, state)?;
             wipe(&file)?;
+            if apple.exists() {
+                let _ = wipe(&apple);
+            }
             let _ = fs::remove_file(boot.join("provision.error.txt"));
             eprintln!("nibos-provision: applied provision.toml");
         }
