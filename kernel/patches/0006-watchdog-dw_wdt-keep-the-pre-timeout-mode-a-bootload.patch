@@ -1,0 +1,131 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Sat, 24 Oct 2026 21:50:23 +0900
+Subject: [PATCH] watchdog: dw_wdt: keep the pre-timeout mode a bootloader left
+ running
+
+A bootloader that starts the watchdog in IRQ mode (a pre-timeout
+interrupt after the first TOP, the reset after the second) has it
+switched to plain reset mode at probe, so the pre-timeout governor
+never runs for a hang before userspace opens the watchdog. Keep IRQ
+mode when the watchdog is already running in it and the IRQ is there,
+with the running TOP as the pre-timeout.
+
+In IRQ mode the counter has to be restarted within one TOP, not the
+two-stage timeout the core sees: max_hw_heartbeat_ms is now one TOP
+there, so the core's worker, which feeds the watchdog itself until
+userspace opens it and between userspace pings, pings before the
+pre-timeout stage rather than at its boundary.
+
+Why: on the RG DS+ (RK3568) a watchdog reset is a CRU global reset
+and the board never comes back from one (it hangs before SPL), while
+a restart through the RK817 PMIC (the kernel's restart handler, as on
+every reboot) does. With the panic pre-timeout governor, the first
+stage panics and the panic restarts through the PMIC; the second
+stage's CRU reset is left for a kernel that can't take the interrupt.
+
+Upstream status: candidate (the pre-timeout part is generic; the
+heartbeat change fixes the worker pinging at the first stage's
+boundary in IRQ mode).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/watchdog/dw_wdt.c | 37 ++++++++++++++++++++++++++++++++++---
+ 1 file changed, 34 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/watchdog/dw_wdt.c b/drivers/watchdog/dw_wdt.c
+index 39031445d..a7efb2ae4 100644
+--- a/drivers/watchdog/dw_wdt.c
++++ b/drivers/watchdog/dw_wdt.c
+@@ -195,6 +195,21 @@ static int dw_wdt_ping(struct watchdog_device *wdd)
+ 	return 0;
+ }
+ 
++/*
++ * In IRQ mode the first TOP raises the pre-timeout interrupt, so the counter
++ * has to be restarted within one TOP rather than the whole two-stage timeout:
++ * that is the hardware heartbeat the core's worker has to keep up with while
++ * it feeds the watchdog itself (before userspace opens it, or between
++ * userspace pings).
++ */
++static void dw_wdt_update_heartbeat(struct dw_wdt *dw_wdt, unsigned int top_s)
++{
++	if (dw_wdt->rmod == DW_WDT_RMOD_IRQ)
++		dw_wdt->wdd.max_hw_heartbeat_ms = top_s * 1000;
++	else
++		dw_wdt->wdd.max_hw_heartbeat_ms = dw_wdt_get_max_timeout_ms(dw_wdt);
++}
++
+ static int dw_wdt_set_timeout(struct watchdog_device *wdd, unsigned int top_s)
+ {
+ 	struct dw_wdt *dw_wdt = to_dw_wdt(wdd);
+@@ -234,11 +249,13 @@ static int dw_wdt_set_timeout(struct watchdog_device *wdd, unsigned int top_s)
+ 	 * kernel(watchdog_dev.c) helps to feed watchdog before
+ 	 * wdd->max_hw_heartbeat_ms
+ 	 */
+-	if (top_s * 1000 <= wdd->max_hw_heartbeat_ms)
++	if (top_s * 1000 <= dw_wdt_get_max_timeout_ms(dw_wdt))
+ 		wdd->timeout = timeout * dw_wdt->rmod;
+ 	else
+ 		wdd->timeout = top_s;
+ 
++	dw_wdt_update_heartbeat(dw_wdt, timeout);
++
+ 	return 0;
+ }
+ 
+@@ -550,6 +567,7 @@ static int dw_wdt_drv_probe(struct platform_device *pdev)
+ 	struct device *dev = &pdev->dev;
+ 	struct watchdog_device *wdd;
+ 	struct dw_wdt *dw_wdt;
++	bool irq_mode;
+ 	int ret;
+ 
+ 	dw_wdt = devm_kzalloc(dev, sizeof(*dw_wdt), GFP_KERNEL);
+@@ -592,8 +610,15 @@ static int dw_wdt_drv_probe(struct platform_device *pdev)
+ 	if (IS_ERR(dw_wdt->rst))
+ 		return PTR_ERR(dw_wdt->rst);
+ 
+-	/* Enable normal reset without pre-timeout by default. */
+-	dw_wdt_update_mode(dw_wdt, DW_WDT_RMOD_RESET);
++	/*
++	 * A bootloader may have left the watchdog running in IRQ mode, with a
++	 * pre-timeout stage before the reset; keep that if the IRQ is there to
++	 * serve it. Otherwise normal reset without pre-timeout by default.
++	 */
++	irq_mode = dw_wdt_is_enabled(dw_wdt) &&
++		   (readl(dw_wdt->regs + WDOG_CONTROL_REG_OFFSET) &
++		    WDOG_CONTROL_REG_RESP_MODE_MASK);
++	dw_wdt->rmod = DW_WDT_RMOD_RESET;
+ 
+ 	/*
+ 	 * Pre-timeout IRQ is optional, since some hardware may lack support
+@@ -610,12 +635,15 @@ static int dw_wdt_drv_probe(struct platform_device *pdev)
+ 			return ret;
+ 
+ 		dw_wdt->wdd.info = &dw_wdt_pt_ident;
++		if (irq_mode)
++			dw_wdt->rmod = DW_WDT_RMOD_IRQ;
+ 	} else {
+ 		if (ret != -ENXIO)
+ 			return ret;
+ 
+ 		dw_wdt->wdd.info = &dw_wdt_ident;
+ 	}
++	dw_wdt_update_mode(dw_wdt, dw_wdt->rmod);
+ 
+ 	reset_control_deassert(dw_wdt->rst);
+ 
+@@ -640,6 +668,9 @@ static int dw_wdt_drv_probe(struct platform_device *pdev)
+ 	 */
+ 	if (dw_wdt_is_enabled(dw_wdt)) {
+ 		wdd->timeout = dw_wdt_get_timeout(dw_wdt);
++		if (dw_wdt->rmod == DW_WDT_RMOD_IRQ)
++			wdd->pretimeout = wdd->timeout / 2;
++		dw_wdt_update_heartbeat(dw_wdt, wdd->timeout / dw_wdt->rmod);
+ 		set_bit(WDOG_HW_RUNNING, &wdd->status);
+ 	} else {
+ 		wdd->timeout = DW_WDT_DEFAULT_SECONDS;
+-- 
+2.56.0
+

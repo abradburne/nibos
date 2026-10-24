@@ -9,7 +9,7 @@ support it well; nibOS adds boot-time and suspend fixes and UHS for the SD card 
 | [`soc.sh`](soc.sh) | `ARCH_ROCKCHIP`, `rockchip/` device trees, TF-A (BL31) v1.46 from rkbin |
 | [`kernel/patches/`](kernel/patches/) | Four: the PMIC and its I2C bus early, a short SD tuning timeout, the first modeset off the probe path, the PMU's 32 kHz clock kept running |
 | [`kernel/rk3568.config`](kernel/rk3568.config) | VOP2, DSI, Panfrost, I2S, SAR ADC, thermal and USB built in; four cores; other SoCs' drivers off |
-| [`uboot/patches/`](uboot/patches/) | Five: the data cache before relocation, the SD clock really at 50 MHz, UHS SDR104 for the SD card, the 32 kHz clock ungated in SPL, the watchdog and the thermal sensor resetting the SoC (a first global reset) |
+| [`uboot/patches/`](uboot/patches/) | Five: the data cache before relocation, the SD clock really at 50 MHz, UHS SDR104 for the SD card, the 32 kHz clock ungated in SPL, the watchdog and the thermal sensor triggering a first global reset (it doesn't bring the RG DS+ back; a panic through the PMIC does) |
 | [`hw/files/`](hw/files/) | Deep sleep; the video decode and 2D blit drivers loaded after start-up |
 
 Why each patch exists, what it bought and whether it could go upstream:

@@ -14,8 +14,10 @@ failed and a way out instead of dropping to the console's login prompt.
   menu drawn as DSlot's own (nibkit's `menu-raster`): Restart DSlot, Restart the device, Open a
   console, Power off, with the D-pad and A. `OnFailure=` fires at every failure, also the ones
   answered by a restart: the safe mode waits 2 s and leaves if DSlot is back.
-- **Hangs.** systemd feeds the SoC's hardware watchdog (`dw_wdt`, 22 s;
-  nibos-hw's `system.conf.d/50-nibos-watchdog.conf`), which its driver stops in suspend; the
+- **Hangs.** systemd feeds the SoC's hardware watchdog (`dw_wdt`, 22 s in IRQ mode;
+  nibos-hw's `system.conf.d/50-nibos-watchdog.conf`), which its driver stops in suspend; its
+  first stage panics the kernel (the watchdog's own reset never brings the RG DS+ back:
+  [ab-rollback.md](../../docs/design/ab-rollback.md#how-a-watchdog-timeout-restarts-the-board)); the
   kernel reboots 10 s after a panic and panics on a soft or hard lockup
   (`kernel/config/nibos.config`).
 

@@ -12,6 +12,7 @@ v7.3-rc7), before the SoC's (`socs/<soc>/kernel/patches/`) and the board's
 | 0003 | rtw88 SDIO: power the card off in suspend without WoWLAN | Candidate |
 | 0004 | rk817 charger: a writable charge voltage (battery protect) | Candidate |
 | 0005 | aw88166: start the amp once the stream runs (speakers after resume) | Candidate |
+| 0006 | dw_wdt: keep the pre-timeout mode a bootloader left running (a watchdog timeout panics) | Candidate |
 
 Why each one exists, as measured, next to the SoC's and the board's, and how to change one:
 [docs/engineering/patches.md](../../docs/engineering/patches.md).

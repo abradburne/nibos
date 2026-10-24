@@ -101,7 +101,9 @@ the lid carries on with the normal boot (the boot UI starts); unplugging powers 
 other wake sleeps again. Any error reading the PMIC boots normally.
 
 **Crash recovery.** systemd feeds the hardware watchdog (`system.conf.d/50-nibos-watchdog.conf`:
-`RuntimeWatchdogSec=20s`, `dw_wdt`'s 22 s; stopped in suspend by its driver). DSlot's restarts
+`RuntimeWatchdogSec=20s` in IRQ mode, `RuntimeWatchdogPreSec`: about 22 s after the last ping
+its first stage panics the kernel, and the panic restarts the device through the PMIC, as the
+watchdog's own reset can't on the RG DS+; stopped in suspend by its driver). DSlot's restarts
 and the safe mode are in [rootfs/safe-mode](../rootfs/safe-mode/README.md).
 
 **Battery.** udev links the board's battery and charger (`NIBOS_BATTERY`, `NIBOS_CHARGER`) as

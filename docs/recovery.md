@@ -9,8 +9,9 @@ stock image, whose stock partitions are never changed. The details are the RG DS
 
 - **DSlot crashes**: systemd starts it again; after three failures in a minute, the safe mode
   ([rootfs/safe-mode](../rootfs/safe-mode/README.md)).
-- **A hang**: systemd feeds the hardware watchdog, which restarts the device ~22 s after
-  userspace stops; a kernel panic, or a CPU stuck in the kernel, restarts it after 10 s.
+- **A hang**: systemd feeds the hardware watchdog; ~22 s after userspace stops, the watchdog
+  panics the kernel, which restarts it 10 s later. A kernel panic, or a CPU stuck in the kernel,
+  restarts it after 10 s ([how](design/ab-rollback.md#how-a-watchdog-timeout-restarts-the-board)).
 - **A bad update**: an unconfirmed slot gets three tries, then SPL boots the other one (below).
 
 ## 1. Hold A while powering on

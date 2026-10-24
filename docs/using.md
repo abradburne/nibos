@@ -152,7 +152,7 @@ rollback` goes back by hand. Games, saves and settings stay. How it works:
 - **An update rolled back** (the device is on the old version): the new one didn't reach its
   shelf three times, so the bootloader went back by itself. `sudo nibos-bootctl status` says
   which slot runs and what happened ([recovery.md](recovery.md#ab-slots)).
-- **It froze**: it restarts by itself, about 20 s after a hang (the watchdog) or 10 s after a
+- **It froze**: it restarts by itself, about 30 s after a hang (the watchdog) or 10 s after a
   kernel crash. Holding power for about 10 s cuts the power in any case.
 - **It's dark with the amber light on**: it's charging while "off" (above); press power to use
   it.

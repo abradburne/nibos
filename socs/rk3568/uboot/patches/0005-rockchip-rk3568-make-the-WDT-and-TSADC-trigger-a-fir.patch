@@ -5,12 +5,18 @@ Subject: [PATCH] rockchip: rk3568: make the WDT and TSADC trigger a first
  global reset
 
 The RK3568's watchdog and thermal sensor trigger a second global reset
-by default, which leaves the SoC hung instead of restarting it: an
-expired watchdog never brings the board back. On the RG DS+ a slot on
-trial whose init never started systemd stayed hung for over ten minutes
-with SPL's watchdog running, and a reboot that needed the watchdog hung
-with only a backlight on. Set both to a first global reset in SPL, as
-PX30 does.
+by default. Set both to a first global reset in SPL, as PX30 does and
+as proposed upstream: it resets more of the SoC, the pins too (on the
+RG DS+ a hung board's backlight goes off rather than staying lit).
+
+It doesn't make the watchdog restart the RG DS+. After either kind of
+global reset that board hangs before SPL: SPL logged no run between a
+watchdog reset and the next power-on, the red LED SPL lights first
+thing stayed off, and turning the SD card off and on in SPL changed
+nothing. Its normal restarts go through the RK817 PMIC (the kernel's
+restart handler) and do bring it back, so nibOS has a watchdog timeout
+panic and restart that way (kernel generic/0006, the panic pre-timeout
+governor).
 
 Upstream status: proposed on the U-Boot list in June 2026 ("rockchip:
 rk3568: make the WDT trigger a first global reset", and the TSADC
@@ -22,7 +28,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 13 insertions(+)
 
 diff --git a/arch/arm/mach-rockchip/rk3568/rk3568.c b/arch/arm/mach-rockchip/rk3568/rk3568.c
-index 0a6607e5..43c69948 100644
+index 0a6607e5..ea91909c 100644
 --- a/arch/arm/mach-rockchip/rk3568/rk3568.c
 +++ b/arch/arm/mach-rockchip/rk3568/rk3568.c
 @@ -28,6 +28,10 @@
@@ -43,9 +49,9 @@ index 0a6607e5..43c69948 100644
 +
 +	/*
 +	 * Make the watchdog and the TSADC trigger a first global reset, as
-+	 * on PX30. The default, a second global reset, leaves the SoC hung
-+	 * rather than restarting it: a watchdog that expires never brings
-+	 * the board back, and a thermal shutdown doesn't either.
++	 * on PX30, rather than the default second global reset: it resets
++	 * the pins too. Neither brings the RG DS+ back (it hangs before SPL
++	 * after either); its restarts go through the RK817 PMIC instead.
 +	 */
 +	setbits_le32(CRU_BASE_ADDR + CRU_GLB_RST_CON,
 +		     GLB_RST_CON_WDT_FIRST | GLB_RST_CON_TSADC_FIRST);

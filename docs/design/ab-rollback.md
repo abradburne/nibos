@@ -113,17 +113,38 @@ A try is used up when SPL boots a slot that isn't good yet. It ends badly howeve
 doesn't reach "good":
 
 - a kernel panic: the kernel restarts 10 s later (`panic=10`);
-- a hang in userspace: the hardware watchdog restarts it 22 s after systemd stops feeding it;
+- a hang in userspace: the hardware watchdog's first stage panics the kernel about 22 s after
+  systemd stops feeding it, and the panic restarts it (below);
 - DSlot crashing into the safe mode (above);
 - someone holding power to switch off: the next power-on is the next try;
 - a hang before systemd (in the kernel, mounting the root, in userspace before PID 1 takes the
   watchdog over): SPL starts the hardware watchdog when it boots a slot on trial (U-Boot
-  `rg-ds-plus/0005`, 22.4 s), and the kernel feeds it until systemd opens it, for at most
-  60 s (`watchdog.open_timeout=60` on the command line). A good slot boots with it off.
-  For the watchdog to restart the board at all, SPL makes it trigger a first global reset
-  (U-Boot `rk3568/0005`): the RK3568's default, a second global reset, leaves the SoC hung.
-  Found on a device: a slot on trial whose init never started stayed hung for over ten
-  minutes with SPL's watchdog running. The test with the fix is to come.
+  `rg-ds-plus/0005`), and the kernel feeds it until systemd opens it, for at most 60 s
+  (`watchdog.open_timeout=60` on the command line). A good slot boots with it off.
+
+### How a watchdog timeout restarts the board
+
+The watchdog's own reset never brings the RG DS+ back. It is a CRU global reset, and after
+one (first or second global reset alike) the board hangs before SPL: dark until switched off
+by hand. Found on the device: a slot on trial whose init never started; then a good slot whose
+watchdog was opened and left unfed. A diagnostic SPL logged no run between the reset and the
+next power-on, the red LED it lit first thing stayed off, and turning the SD card off and on
+in SPL changed nothing. Every normal restart goes through the RK817 PMIC instead (the RK817
+is the `system-power-controller`, and its restart handler comes before PSCI's), and those
+come back, as do panics.
+
+So a watchdog timeout panics, and the panic restarts through the PMIC. The watchdog runs in
+IRQ mode, two stages: the first raises the pre-timeout interrupt, which panics the kernel
+(the panic pre-timeout governor, `nibos.config`), and only the second resets.
+
+- SPL starts it in IRQ mode for a slot on trial, two stages of 11.2 s (U-Boot `rg-ds-plus/0005`);
+  Linux's dw_wdt keeps the mode it finds and pings within one stage (kernel `generic/0006`).
+- systemd asks for IRQ mode (`RuntimeWatchdogPreSec`, nibos-hw's `50-nibos-watchdog.conf`):
+  two stages of about 11 s for its 20 s.
+- Left over: a kernel so stuck that the interrupt isn't taken. The lockup detectors panic for
+  most of those (`nibos.config`); one that defeats them too ends in the CRU reset and stays dark.
+  U-Boot `rk3568/0005` makes that a first global reset (the pins reset too), as proposed
+  upstream. The thermal shutdown (TSADC, `hw-tshut-mode` CRU) has the same weakness.
 
 ## What could need a card reader
 
@@ -159,11 +180,12 @@ an updater writes the first block.
 
 ## Not yet
 
-- **Phase 2's test on a device**: SPL arms the watchdog for a slot on trial (built, above).
-  To test: a slot on trial whose init never starts systemd (`init=/usr/bin/sleep infinity`
-  in its FIT) restarting after ~22 s three times and handing back; a good slot still booting
-  with the watchdog off; a userspace hang (DSlot's unit `ExecStart=/bin/sleep infinity`, the
-  splash never taken over) as a failed try.
+- **Phase 2's test on a device**: SPL arms the watchdog for a slot on trial, in IRQ mode (built,
+  above). To test: a panic restarting through the PMIC (`echo c > /proc/sysrq-trigger`); a
+  watchdog left unfed on a good slot restarting by itself; a slot on trial whose init never
+  starts systemd (`init=/usr/bin/cat` in its FIT) restarting three times and handing back; a
+  userspace hang (DSlot's unit `ExecStart=/bin/sleep infinity`, the splash never taken over)
+  as a failed try.
 - **Phase 3: the fallback follows the good slot.** Today holding A boots `/boot` on root A
   with the plain command line; U-Boot proper can read the block (`mmc read`) and pick the
   `extlinux.conf` on the good slot's root instead.

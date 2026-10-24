@@ -7,23 +7,31 @@ Subject: [PATCH] rockchip: rk3568: RG DS: a slot on trial boots with the
 A slot on trial that hangs before systemd takes the hardware watchdog
 over (in the kernel, mounting the root, or in userspace before PID 1)
 never restarted: only a panic used up its try. SPL now starts the
-RK3568's dw_wdt (22.4 s) when it boots a slot on trial; Linux's dw_wdt
-finds it running and keeps it fed until systemd opens it, within the
-command line's watchdog.open_timeout. A good slot boots with the
-watchdog off, as before, and holding A is still checked first.
+RK3568's dw_wdt when it boots a slot on trial; Linux's dw_wdt finds it
+running and keeps it fed until systemd opens it, within the command
+line's watchdog.open_timeout. A good slot boots with the watchdog off,
+as before, and holding A is still checked first.
+
+The watchdog runs in IRQ mode, two stages of 11.2 s: the first stage's
+interrupt panics the kernel (dw_wdt keeps the mode, kernel
+generic/0006; the panic pre-timeout governor) and the panic restarts
+the board through the RK817 PMIC. The watchdog's own reset, the second
+stage, is a CRU global reset, which this board never comes back from
+(it hangs before SPL): found on the device, a slot on trial whose
+init never started stayed dark until switched off by hand.
 
 Upstream status: board-specific, not for upstream (nibOS's own scheme).
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- arch/arm/mach-rockchip/rk3568/rk3568.c | 19 +++++++++++++++++++
- 1 file changed, 19 insertions(+)
+ arch/arm/mach-rockchip/rk3568/rk3568.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
 
 diff --git a/arch/arm/mach-rockchip/rk3568/rk3568.c b/arch/arm/mach-rockchip/rk3568/rk3568.c
-index e758b569..623a7c78 100644
+index 75d4902b..6ea72acf 100644
 --- a/arch/arm/mach-rockchip/rk3568/rk3568.c
 +++ b/arch/arm/mach-rockchip/rk3568/rk3568.c
-@@ -265,6 +265,7 @@ bool rockchip_dwmmc_board_no_uhs(void)
+@@ -278,6 +278,7 @@ bool rockchip_dwmmc_board_no_uhs(void)
  #include <memalign.h>
  #include <mmc.h>
  #include <u-boot/crc.h>
@@ -31,7 +39,7 @@ index e758b569..623a7c78 100644
  #include <asm/unaligned.h>
  
  /*
-@@ -280,6 +281,7 @@ bool rockchip_dwmmc_board_no_uhs(void)
+@@ -293,6 +294,7 @@ bool rockchip_dwmmc_board_no_uhs(void)
   * same rules.
   */
  #define AB_SLOT_B		0x10000		/* sectors: 32 MiB */
@@ -39,7 +47,7 @@ index e758b569..623a7c78 100644
  #define AB_BLOCK		(0x20000 - 2)	/* the partition's last KiB */
  
  static bool ab_valid(const u8 *s)
-@@ -288,6 +290,22 @@ static bool ab_valid(const u8 *s)
+@@ -301,6 +303,28 @@ static bool ab_valid(const u8 *s)
  	       crc32(0, s, 508) == get_unaligned_le32(s + 508);
  }
  
@@ -47,22 +55,28 @@ index e758b569..623a7c78 100644
 + * A slot on trial boots with the watchdog running, so a hang anywhere before
 + * systemd takes the watchdog over (the kernel, the root, userspace before
 + * PID 1 opens it) restarts the device and uses up the try, as a panic does.
-+ * TOP 13: 2^29 cycles of the 24 MHz tclk, 22.4 s. Linux's dw_wdt finds it
-+ * running and feeds it (WATCHDOG_HANDLE_BOOT_ENABLED) for as long as
-+ * watchdog.open_timeout on the command line allows, until systemd opens it.
++ * IRQ mode, two stages of TOP 12 (2^28 cycles of the 24 MHz tclk, 11.2 s).
++ * Linux's dw_wdt finds it running, keeps the mode and feeds it
++ * (WATCHDOG_HANDLE_BOOT_ENABLED) for as long as watchdog.open_timeout on the
++ * command line allows, until systemd opens it. If nothing does, the first
++ * stage's interrupt panics the kernel (the panic pre-timeout governor) and
++ * the panic restarts the board through the RK817 PMIC. The second stage, a
++ * CRU global reset, is left for a kernel that can't take the interrupt:
++ * this board doesn't come back from that one (it hangs before SPL).
 + * A good slot boots with it off, as before.
 + */
 +static void ab_watchdog(void)
 +{
-+	writel(13 << 4 | 13, AB_WDT + 0x04);	/* TORR: TOP_INIT, TOP */
++	writel(12 << 4 | 12, AB_WDT + 0x04);	/* TORR: TOP_INIT, TOP */
 +	writel(0x76, AB_WDT + 0x0c);		/* CRR: restart the count */
-+	writel(7 << 2 | 1, AB_WDT + 0x00);	/* CR: reset pulse 256 pclk, on */
++	/* CR: reset pulse 256 pclk, IRQ mode (RMOD), on */
++	writel(7 << 2 | BIT(1) | 1, AB_WDT + 0x00);
 +}
 +
  static unsigned long ab_pick(struct mmc *mmc, unsigned long base)
  {
  	ALLOC_CACHE_ALIGN_BUFFER(u8, buf, 2 * 512);
-@@ -320,6 +338,7 @@ static unsigned long ab_pick(struct mmc *mmc, unsigned long base)
+@@ -333,6 +357,7 @@ static unsigned long ab_pick(struct mmc *mmc, unsigned long base)
  	if (blk[6 + a]) {
  		blk[6 + a]--;
  		printf("A/B: slot %c on trial, %d tries left\n", 'A' + a, blk[6 + a]);
