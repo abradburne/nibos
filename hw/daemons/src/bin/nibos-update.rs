@@ -52,6 +52,8 @@ fn sys(path: &str) -> PathBuf {
 const MIN_BATTERY: u32 = 30;
 
 static STOP: AtomicBool = AtomicBool::new(false);
+/// The step running, for the status (`step`: what "Try again" runs).
+static STEP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 extern "C" fn on_term(_: libc::c_int) {
     STOP.store(true, Ordering::Relaxed);
@@ -102,6 +104,14 @@ fn status(phase: &str, detail: &str, extra: &[(&str, String)]) {
             m.payload.size
         ));
     }
+    // The version in the other slot, and whether going back to it is possible (it is good).
+    if let Some(prev) = read(state("previous")) {
+        json.push_str(&format!(",\"previous\":{}", js(&prev)));
+    }
+    json.push_str(&format!(",\"rollback_ok\":{}", other_slot_good()));
+    if let Some(step) = STEP.get() {
+        json.push_str(&format!(",\"step\":{}", js(step)));
+    }
     for (k, v) in [("updated_to", "updated-to"), ("failed", "failed")] {
         if let Some(x) = read(state(v)) {
             json.push_str(&format!(",\"{k}\":{}", js(&x)));
@@ -113,6 +123,27 @@ fn status(phase: &str, detail: &str, extra: &[(&str, String)]) {
     json.push_str("}\n");
     let _ = fs::create_dir_all(sys(RUN));
     let _ = write(sys(RUN).join("status.json"), &json);
+}
+
+/// Whether the slot that isn't running is confirmed good (nibos-bootctl status).
+fn other_slot_good() -> bool {
+    let Some(running) = std::env::var("NIBOS_UPDATE_RUNNING")
+        .ok()
+        .and_then(|s| s.chars().next())
+        .or_else(|| running_slot(&fs::read_to_string("/proc/cmdline").unwrap_or_default()))
+    else {
+        return false;
+    };
+    let other = if running == 'A' { 'B' } else { 'A' };
+    Command::new("nibos-bootctl")
+        .arg("status")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .is_some_and(|out| {
+            out.lines()
+                .any(|l| l.starts_with(&format!("slot {other}: good")))
+        })
 }
 
 fn fail(e: impl std::fmt::Display) -> ! {
@@ -287,6 +318,8 @@ fn download() {
         .unwrap_or_else(|e| fail(format!("{}: {e}", dev.display())));
     let manifest_sha = update::sha256(&fs::read(state("manifest.json")).unwrap_or_default());
     let mut progress = Progress::load(&state("progress"), &manifest_sha);
+    // The other slot's old contents are being written over: nothing to go back to any more.
+    let _ = fs::remove_file(state("previous"));
     let total = m.root.chunks.len();
     let started = Instant::now();
     status(
@@ -413,6 +446,7 @@ fn apply() {
     }
     preconditions();
     write(state("applied"), version).unwrap_or_else(|e| fail(e));
+    let _ = write(state("previous"), &release().version);
     if !bootctl(&["try", slot]) {
         let _ = fs::remove_file(state("applied"));
         fail("couldn't set the slot to be tried");
@@ -468,7 +502,7 @@ fn booted() {
         } else {
             // Back on the old version: the new one didn't come up.
             let _ = write(state("failed"), &applied);
-            for f in ["applied", "ready", "progress"] {
+            for f in ["applied", "ready", "progress", "previous"] {
                 let _ = fs::remove_file(state(f));
             }
         }
@@ -531,6 +565,7 @@ fn show() {
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let cmd = args.first().map(String::as_str).unwrap_or("show");
+    let _ = STEP.set(cmd.to_owned());
     if cmd != "show"
         && unsafe { libc::geteuid() } != 0
         && std::env::var_os("NIBOS_UPDATE_TEST_ROOT").is_none()

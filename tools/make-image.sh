@@ -13,7 +13,8 @@
 # Builds the kernel, U-Boot (SPL in Falcon mode, and the fallback for this layout) and
 # nibos-hw, the root (rootfs/make-arch.sh with IMAGE=1), the Falcon FIT, and lays them out
 # (tools/assemble-image.sh) as out/nibos-<version>-<board>[-dslot].img.xz, with its sha256
-# in out/SHA256SUMS. SKIP_BUILD=1 reuses kernel/out and hw/out as they are (HWPKG=FILE takes
+# in out/SHA256SUMS. VERSION=V names the build V instead of its git version. SKIP_BUILD=1 reuses
+# kernel/out and hw/out as they are (HWPKG=FILE takes
 # that nibos-hw package rather than the newest). SOURCE_URL is
 # where the release's source will be (in the NOTICE).
 set -euo pipefail
@@ -26,7 +27,9 @@ case "${1:-}" in
 --dslot) edition=dslot ;;
 *) usage 2 ;;
 esac
-version=$(git -C "$NIBOS_ROOT" describe --tags --always --dirty)
+# VERSION names a test build (tools/test-update.sh, a release to try on a device); a release
+# is built at its tag.
+version=${VERSION:-$(git -C "$NIBOS_ROOT" describe --tags --always --dirty)}
 name=nibos-$version-$BOARD_HOSTNAME$([ "$edition" = dslot ] && echo -dslot || true)
 out=$NIBOS_ROOT/out
 work=$out/work-$name

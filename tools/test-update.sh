@@ -129,13 +129,13 @@ with open(sys.argv[1], "r+b") as f:
     f.write(bytes([b[0] ^ 1]))
 PY
 rm -f "$P/var/lib/nibos/state/update/progress" "$P/var/lib/nibos/state/update/ready"
-check "a damaged chunk: refused, not ready" '! nibos-update download 2>/dev/null && [ "$(st phase)" = error ] && [ ! -e "$P/var/lib/nibos/state/update/ready" ]'
+check "a damaged chunk: refused, not ready, the failed step named" '! nibos-update download 2>/dev/null && [ "$(st phase)" = error ] && [ "$(st step)" = download ] && [ ! -e "$P/var/lib/nibos/state/update/ready" ]'
 check "nothing to apply" '! nibos-update apply 2>/dev/null && nibos-bootctl status | grep -q "active: A"'
 cp "$tmp/good.slot" "$payload"
 check "the good one again: ready" 'nibos-update download >/dev/null && [ "$(st phase)" = ready ]'
 
 echo "== apply, and after"
-check "applied: slot B on trial (3 tries)" 'nibos-update apply >/dev/null && nibos-bootctl status | grep -q "active: B"'
+check "applied: slot B on trial (3 tries), the old version recorded" 'nibos-update apply >/dev/null && nibos-bootctl status | grep -q "active: B" && [ "$(st previous)" = "$running" ]'
 # Back on A (as after three failed tries): the update is reported as failed.
 check "back on the old version: \"failed\"" 'nibos-update booted && [ "$(st failed)" = "$newer" ] && [ ! -e "$P/var/lib/nibos/state/update/applied" ]'
 check "ack forgets it" 'nibos-update ack && [ -z "$(st failed)" ]'

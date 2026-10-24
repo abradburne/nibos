@@ -108,8 +108,9 @@ A root program in nibos-hw, run one step at a time as `nibos-update@<step>.servi
 may start and stop without a password (polkit, `50-nibos-update.rules`). Each step writes
 `/run/nibos/update/status.json`: the phase (`idle`, `checking`, `available`, `downloading` with
 chunks done and the total, `paused`, `finishing`, `ready`, `restarting`, `trying`, `error`,
-`current`), the release on offer with its notes and size, and `updated_to` or `failed` after an
-update. `nib update` and DSlot start the steps and read that file. The steps run at low
+`current`), the step that wrote it (`step`), the release on offer with its notes and size, the
+version in the other slot and whether going back to it is possible (`previous`, `rollback_ok`),
+and `updated_to` or `failed` after an update. `nib update` and DSlot start the steps and read that file. The steps run at low
 priority (`Nice=19`, `IOSchedulingClass=idle`, `CPUWeight=1`), so a game keeps its frame time
 while a download writes, and stopping `nibos-update@download` pauses it.
 

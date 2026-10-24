@@ -210,6 +210,7 @@ in_machine busctl --system --auto-start=no call net.connman.iwd / \
     org.freedesktop.DBus.ObjectManager GetManagedObjects >/dev/null 2>&1 || true
 sleep 1
 check "reading iwd without auto-start doesn't start it" 'inactive iwd.service && inactive nibos-network-modules.service'
+check "system updates: nibOS's update key" 'grep -q "^untrusted comment: minisign public key 41B02B0D6ED49D26$" "$r/usr/lib/nibos/update.pub"'
 check "system updates: the release file, nibos-update, its boot step and keep list" 'grep -q "^NIBOS_VERSION=." "$r/usr/lib/nibos/release" && grep -q "^NIBOS_UPDATE_REPO=." "$r/usr/lib/nibos/release" && [ -x "$r/usr/bin/nibos-update" ] && [ -x "$r/usr/lib/nibos/nib-update" ] && [ -L "$r/etc/systemd/system/multi-user.target.wants/nibos-update-boot.service" ] && [ -s "$r/usr/lib/nibos/update-keep" ]'
 check "the update step at boot ran and said where it stands" '[ "$(systemctl -M "$machine" show -p Result --value nibos-update-boot.service)" = success ] && in_machine cat /run/nibos/update/status.json | grep -q "\"phase\":\"idle\""'
 check "the radios' switches: nib bluetooth and the restore at boot" '[ -x "$r/usr/lib/nibos/nib-bluetooth" ] && [ -L "$r/etc/systemd/system/multi-user.target.wants/nibos-radios-restore.service" ]'
