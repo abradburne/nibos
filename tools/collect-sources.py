@@ -30,14 +30,20 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NIBOS = os.path.dirname(HERE)
 PARENT = os.path.dirname(NIBOS)
 ALARM_REPO = "https://github.com/archlinuxarm/PKGBUILDs.git"
 ARCH_GITLAB = "https://gitlab.archlinux.org/archlinux/packaging/packages/{}.git"
+# Arch's own source packages (makepkg --allsource, for the versions it keeps): where a package's
+# upstream has gone away.
+ARCH_SOURCES = "https://sources.archlinux.org/sources/packages/{}"
 # Licences that oblige whoever passes the binaries on to offer the source.
 OBLIGES = re.compile(r"GPL|MPL|EPL|CDDL|EUPL|CeCILL|OSL|APSL|Sleepycat", re.I)
+# Where a source is when its own host isn't reachable: the same file (the PKGBUILD's sum checks it).
+MIRRORS = {"https://gmplib.org/download/gmp/": "https://ftp.gnu.org/gnu/gmp/"}
 # Packages built by nibOS's image (packager "Unknown Packager"): the source each comes from.
 OWN_PACKAGES = {
     "nibos-hw": "nibos",
@@ -182,11 +188,18 @@ def git_snapshot(url, fragment, dest_tar, prefix):
     """A git source at its commit, tag or branch, as a plain tarball (not the whole history)."""
     kind, _, ref = fragment.partition("=")
     ref = ref.split("?")[0]
+    if kind == "tag" and re.fullmatch(r"[0-9a-f]{40}", ref):
+        kind = "commit"  # a commit named as a tag
     with tempfile.TemporaryDirectory() as d:
         run(["git", "init", "-q", d])
         want = {"commit": ref, "tag": f"refs/tags/{ref}", "branch": f"refs/heads/{ref}"}.get(kind, "HEAD")
         r = subprocess.run(["git", "-C", d, "fetch", "-q", "--depth", "1", url, want],
                            capture_output=True, text=True)
+        if r.returncode and kind == "commit" and re.fullmatch(r"[0-9a-f]{40}", ref) and "SSL" in r.stderr:
+            # A host whose certificate doesn't match its name: the full commit hash names the
+            # content whatever answers, so fetch it without the certificate check.
+            r = subprocess.run(["git", "-C", d, "-c", "http.sslVerify=false", "fetch", "-q",
+                                "--depth", "1", url, want], capture_output=True, text=True)
         if r.returncode:
             # A server that won't serve a commit by its hash: a clone without file contents,
             # then the files for this commit alone.
@@ -209,7 +222,7 @@ def collect_tree(tree, files, srcdest, name, env=None):
         return path
     stage = os.path.join(srcdest, "stage", name)
     shutil.rmtree(stage, ignore_errors=True)
-    shutil.copytree(tree, stage, ignore=shutil.ignore_patterns(".git", "src", "pkg"))
+    shutil.copytree(tree, stage, symlinks=True, ignore=shutil.ignore_patterns(".git", "src", "pkg"))
     for entry, kind, want in source_list(tree, env):
         fname, _, url = entry.rpartition("::")
         if "://" not in url:
@@ -220,12 +233,36 @@ def collect_tree(tree, files, srcdest, name, env=None):
             label = fname or os.path.basename(base.rstrip("/")).removesuffix(".git")
             git_snapshot(base, fragment, os.path.join(stage, f"{label}.vcs.tar"), label)
             continue
-        if re.match(r"(svn|hg|bzr|fossil)\+", url):
+        if url.startswith("hg+"):
+            # Mercurial, as hgweb serves it: the tree at the tag or revision, as a tarball.
+            base, _, fragment = url.removeprefix("hg+").partition("#")
+            rev = fragment.partition("=")[2] or "tip"
+            label = fname or os.path.basename(base.rstrip("/"))
+            dest = os.path.join(stage, f"{label}-{rev}.vcs.tar.gz")
+            archive = f"{base.rstrip('/')}/archive/{rev}.tar.gz"
+            m = re.fullmatch(r"NSS_(\d+)_(\d+)(?:_(\d+))?_RTM", rev)
+            if "hg.mozilla.org/projects/nss" in base and m:
+                # hg.mozilla.org refuses archive downloads; Mozilla publishes each NSS release's
+                # tree at its tag as a tarball.
+                version = ".".join(x for x in m.groups() if x)
+                archive = (f"https://ftp.mozilla.org/pub/security/nss/releases/{rev}/src/"
+                           f"nss-{version}.tar.gz")
+                dest = os.path.join(stage, os.path.basename(archive))
+            run(["curl", "-fsSL", "--retry", "3", "-o", dest, archive], capture_output=True)
+            continue
+        if re.match(r"(svn|bzr|fossil)\+", url):
             raise RuntimeError(f"a VCS source this doesn't fetch: {entry}")
         fname = fname or os.path.basename(url.split("#")[0].split("?")[0])
         cached = os.path.join(srcdest, fname)
         if not os.path.exists(cached):
-            run(["curl", "-fsSL", "--retry", "3", "-o", cached + ".part", url], capture_output=True)
+            urls = [url] + [url.replace(a, b, 1) for a, b in MIRRORS.items() if url.startswith(a)]
+            for i, u in enumerate(urls):
+                r = subprocess.run(["curl", "-fsSL", "--retry", "3", "-o", cached + ".part", u],
+                                   capture_output=True, text=True)
+                if r.returncode == 0:
+                    break
+                if i == len(urls) - 1:
+                    raise RuntimeError(f"curl {u}: {r.stderr.strip()}")
             os.replace(cached + ".part", cached)
         if kind:
             algo = "sha256" if kind == "sha256" else "blake2b"
@@ -305,6 +342,20 @@ def main():
 
     archive_of = {}  # package name -> (archive path, how)
     failed = []
+    # Where each archive came from, kept across runs into the same OUT (a resumed run skips the
+    # archives it has, and still names their origin in the manifest).
+    origins_file = os.path.join(a.out, "sources-from.tsv")
+    origins = {}
+    if os.path.exists(origins_file):
+        for line in open(origins_file):
+            k, _, v = line.rstrip("\n").partition("\t")
+            origins[k] = v
+
+    def origin(path, how):
+        origins[os.path.basename(path)] = how
+        with open(origins_file, "a") as f:
+            f.write(f"{os.path.basename(path)}\t{how}\n")
+        return path, how
 
     # Arch Linux ARM's packages, by pkgbase.
     alarm = os.path.join(a.out, "PKGBUILDs")
@@ -319,12 +370,16 @@ def main():
         if only and base not in only:
             continue
         done = os.path.join(files, f"{base}-{version.replace(':', '-')}.src.tar.zst")
-        if os.path.exists(done):  # from an earlier run into the same OUT
-            for n in names:
-                archive_of[n] = (done, "collected by an earlier run")
-            continue
         tree = os.path.join(tmp, "trees", f"{base}-{version}")
         os.makedirs(tree, exist_ok=True)
+        if os.path.exists(done):  # from an earlier run into the same OUT
+            how = origins.get(os.path.basename(done))
+            if not how:  # an earlier run that didn't record it: find the tree again to say
+                how = alarm_tree(alarm, base, version, tree) or arch_tree(base, version, tree)
+                how = origin(done, how or "unknown")[1]
+            for n in names:
+                archive_of[n] = (done, how)
+            continue
         how = alarm_tree(alarm, base, version, tree)
         if how is False:
             failed.append(f"{base} {version}: Arch Linux ARM's tree has no commit at this version")
@@ -337,11 +392,24 @@ def main():
             path = collect_tree(tree, files, srcdest, f"{base}-{version.replace(':', '-')}")
         except (subprocess.CalledProcessError, RuntimeError) as e:
             err = getattr(e, "stderr", "") or str(e)
+            name = f"{base}-{version}.src.tar.gz"
+            path = os.path.join(files, name.replace(":", "-"))
+            r = subprocess.run(["curl", "-fsSL", "-o", path,
+                                ARCH_SOURCES.format(urllib.parse.quote(name))],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                print(f"{base} {version}: {os.path.basename(path)} (Arch's source package; "
+                      f"{str(err).strip()[-120:]})", flush=True)
+                for n in names:
+                    archive_of[n] = origin(path, "Arch's source package (sources.archlinux.org)")
+                continue
+            if os.path.exists(path):
+                os.remove(path)
             failed.append(f"{base} {version} ({how}): {str(err).strip()[-300:]}")
             continue
         print(f"{base} {version}: {os.path.basename(path)} ({how})", flush=True)
         for n in names:
-            archive_of[n] = (path, how)
+            archive_of[n] = origin(path, how)
 
     if only:  # a retry of some of Arch Linux ARM's packages: those alone
         for f in failed:
