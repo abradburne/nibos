@@ -647,6 +647,40 @@ pub fn power_ok(battery: &Path, charger: &Path, min_percent: u32) -> Result<()> 
     }
 }
 
+/// `new_shadow` (an /etc/shadow) with `user`'s password, and when it was last changed, taken
+/// from `old_shadow`: what an update carries over from the running root for the one account a
+/// person sets a password on. Every other line, and the rest of the user's, stays the new
+/// root's, so a release's own system accounts are its own. None if either lacks the user, or
+/// nothing would change.
+pub fn carry_password(old_shadow: &str, new_shadow: &str, user: &str) -> Option<String> {
+    let fields = |text: &str| {
+        text.lines()
+            .map(|l| l.split(':').map(str::to_owned).collect::<Vec<_>>())
+            .find(|f| f.first().is_some_and(|n| n == user) && f.len() >= 3)
+    };
+    let old = fields(old_shadow)?;
+    let mut new = fields(new_shadow)?;
+    if new[1] == old[1] {
+        return None;
+    }
+    new[1] = old[1].clone();
+    new[2] = old[2].clone();
+    let line = new.join(":");
+    let mut out: String = new_shadow
+        .lines()
+        .map(|l| {
+            if l.split(':').next() == Some(user) {
+                line.clone()
+            } else {
+                l.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    out.push('\n');
+    Some(out)
+}
+
 /// The slot the running root is on, from the kernel's command line (`root=PARTLABEL=…-a|b`).
 pub fn running_slot(cmdline: &str) -> Option<char> {
     cmdline
@@ -1037,5 +1071,25 @@ mod tests {
         assert_eq!(e.to_string(), "nothing is published at the update address");
         assert!(e.raw().unwrap().contains("404"));
         assert_eq!(Error::Io(io::Error::other("disk full")).code(), "io_error");
+    }
+
+    #[test]
+    fn password_carries_over_alone() {
+        let old = "root:!*:20000::::::\nnibos:$y$j9T$abc$def:20380:0:99999:7:::\n";
+        let new = "root:!*:20385::::::\nnibos::20385:0:99999:7:::\nnewsvc:!*:20385::::::\n";
+        let out = carry_password(old, new, "nibos").unwrap();
+        assert_eq!(
+            out,
+            "root:!*:20385::::::\nnibos:$y$j9T$abc$def:20380:0:99999:7:::\nnewsvc:!*:20385::::::\n"
+        );
+        // Already the same, or the user missing on either side: nothing to do.
+        assert!(carry_password(&out, &out, "nibos").is_none());
+        assert!(carry_password("root:x:1::::::\n", new, "nibos").is_none());
+        assert!(carry_password(old, "root:x:1::::::\n", "nibos").is_none());
+        // A locked account (no password set) carries over as locked.
+        let locked = "nibos:!:20380:0:99999:7:::\n";
+        assert!(carry_password(locked, new, "nibos")
+            .unwrap()
+            .contains("nibos:!:20380:"));
     }
 }

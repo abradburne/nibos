@@ -19,8 +19,8 @@
 //! `show`, `nib update` and DSlot read. What lasts across restarts is on the state partition.
 
 use nibos_hw::update::{
-    self, applicable, fetch, fetch_fit, keep_paths, power_ok, running_slot, verify, write_root,
-    Error, FileSource, Manifest, Progress, Release, Source, UrlSource,
+    self, applicable, carry_password, fetch, fetch_fit, keep_paths, power_ok, running_slot, verify,
+    write_root, Error, FileSource, Manifest, Progress, Release, Source, UrlSource,
 };
 use std::fs::{self, File};
 use std::io::Write;
@@ -464,11 +464,56 @@ fn carry_over(dev: &Path) {
             break;
         }
     }
+    if result.is_ok() {
+        keep_password(&sys("/etc/shadow"), &mnt.join("etc/shadow"));
+    }
     let _ = Command::new("sync").status();
     let _ = Command::new("umount").arg(&mnt).status();
     if let Err(e) = result {
         fail_code("io_error", e);
     }
+}
+
+/// The account a person sets a password on (provision.toml's [user], `passwd`).
+const USER: &str = "nibos";
+
+/// Puts the user's password from `from` (an /etc/shadow) into `to`: /etc/shadow is the root's,
+/// not the state partition's, and isn't in update-keep, since the new release brings its own
+/// system accounts. Written in place, so the file keeps its owner and mode.
+fn keep_password(from: &Path, to: &Path) -> bool {
+    let (Ok(old), Ok(new)) = (fs::read_to_string(from), fs::read_to_string(to)) else {
+        return false;
+    };
+    match carry_password(&old, &new, USER) {
+        Some(text) => fs::write(to, text).is_ok(),
+        None => false,
+    }
+}
+
+/// On the first boot of an update applied by a release that didn't carry the password over
+/// (0.1.0-alpha1): takes it from the previous slot's root, still there until the next update.
+/// Once per version.
+fn recover_password(version: &str) {
+    if read(state("password-kept")).as_deref() == Some(version) {
+        return;
+    }
+    let _ = write(state("password-kept"), version);
+    let other = if running() == 'A' { 'B' } else { 'A' };
+    let mnt = sys(RUN).join("previous");
+    let _ = fs::create_dir_all(&mnt);
+    let mounted = Command::new("mount")
+        .args(["-t", "ext4", "-o", "ro"])
+        .arg(slot_device(other))
+        .arg(&mnt)
+        .status()
+        .is_ok_and(|s| s.success());
+    if !mounted {
+        return;
+    }
+    if keep_password(&mnt.join("etc/shadow"), &sys("/etc/shadow")) {
+        eprintln!("nibos-update: the password set before the update is kept");
+    }
+    let _ = Command::new("umount").arg(&mnt).status();
 }
 
 fn reboot() {
@@ -557,6 +602,7 @@ fn booted() {
     }
     if let Some(applied) = read(state("applied")) {
         if applied == r.version {
+            recover_password(&r.version);
             if !bootctl(&["unconfirmed"]) {
                 // Confirmed: done. The old slot stays as the way back.
                 let _ = write(state("updated-to"), &applied);

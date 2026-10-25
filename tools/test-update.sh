@@ -60,6 +60,8 @@ cp "$work/docs/release" "$P/usr/lib/nibos/release"
 cp "$tmp/test.pub" "$P/usr/lib/nibos/update.pub"
 cp "$here/../hw/files/usr/lib/nibos/update-keep" "$P/usr/lib/nibos/update-keep"
 echo 0123456789abcdef > "$P/etc/machine-id"
+hash='$6$test$0123456789'
+printf 'root:!*:20000::::::\nnibos:%s:20380:0:99999:7:::\n' "$hash" > "$P/etc/shadow"
 echo key > "$P/etc/ssh/ssh_host_ed25519_key"
 echo 'theme = "x"' > "$P/home/nibos/.config/dslot/settings.toml"
 echo 80 > "$P/run/nibos/battery/capacity"
@@ -123,6 +125,10 @@ check "no boot control block until applied (SPL keeps booting A)" 'nibos-bootctl
 mkdir -p "$tmp/m"
 mount -o ro "${loop}p4" "$tmp/m"
 check "the device's identity and the user's settings carried over" 'cmp -s "$P/etc/machine-id" "$tmp/m/etc/machine-id" && cmp -s "$P/home/nibos/.config/dslot/settings.toml" "$tmp/m/home/nibos/.config/dslot/settings.toml" && cmp -s "$P/etc/ssh/ssh_host_ed25519_key" "$tmp/m/etc/ssh/ssh_host_ed25519_key"'
+# The user's password and when it was set; the rest of the line, and every other account, the new
+# root's own.
+pw() { awk -F: -v u=nibos '$1 == u { print $2 ":" $3 }' "$1"; }
+check "the password carried over, the new root's other accounts its own" '[ "$(pw "$tmp/m/etc/shadow")" = "$hash:20380" ] && ! grep -q "^root:!\*:20000:" "$tmp/m/etc/shadow"'
 umount "$tmp/m"
 
 echo "== a damaged download"
@@ -148,6 +154,16 @@ check "applied: slot B on trial (3 tries), the old version recorded" 'nibos-upda
 # Back on A (as after three failed tries): the update is reported as failed.
 check "back on the old version: \"failed\"" 'nibos-update booted && [ "$(st failed)" = "$newer" ] && [ ! -e "$P/var/lib/nibos/state/update/applied" ]'
 check "ack forgets it" 'nibos-update ack && [ -z "$(st failed)" ]'
+# The first boot of a version applied by a release that didn't carry the password over: the
+# running root (slot B, the new version) has none, slot A (the previous one) has it.
+cp "$P/etc/shadow" "$tmp/shadow.old"
+printf 'root:!*:20385::::::\nnibos::20385:0:99999:7:::\n' > "$P/etc/shadow"
+sed -i "s/^NIBOS_VERSION=.*/NIBOS_VERSION=$newer/" "$P/usr/lib/nibos/release"
+echo "$newer" > "$P/var/lib/nibos/state/update/applied"
+check "first boot after an update: the password taken from the previous slot, once" 'NIBOS_UPDATE_RUNNING=B nibos-update booted && [ "$(pw "$P/etc/shadow")" = "$hash:20380" ] && grep -q "^root:!\*:20385:" "$P/etc/shadow" && [ "$(cat "$P/var/lib/nibos/state/update/password-kept")" = "$newer" ]'
+cp "$work/docs/release" "$P/usr/lib/nibos/release"
+rm -f "$P/var/lib/nibos/state/update/applied" "$P/var/lib/nibos/state/update/updated-to"
+cp "$tmp/shadow.old" "$P/etc/shadow"
 # Going back by hand (slot B confirmed good, then rollback): the version left behind is recorded.
 nibos-bootctl try B >/dev/null && nibos-bootctl good >/dev/null 2>&1
 check "rollback: back to A, the version left behind recorded" 'nibos-update rollback >/dev/null && nibos-bootctl status | grep -q "active: A" && [ "$(st previous)" = "$running" ]'

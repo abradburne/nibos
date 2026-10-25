@@ -191,6 +191,12 @@ in nibos-hw (`/usr/lib/nibos/update-keep`):
 - `/var/lib/nibos` (brightness, lid, battery protect, an imported speaker tuning);
 - `/var/lib/systemd/rfkill` (the radios as they were left), `/var/lib/bluetooth` (pairings).
 
+And the user's password: the `nibos` line's hash in `/etc/shadow` (from provision.toml's `[user]`
+or `passwd`), copied into the new root's file, whose other accounts stay the release's own. A
+release whose updater didn't do that (0.1.0-alpha1) is made good on the new version's first
+boot: `nibos-update booted` takes the hash from the previous slot, still there until the next
+update.
+
 The release's `migrate` number says which state format the new slot expects. Scripts in the new
 slot's `/usr/lib/nibos/migrate.d/` run once on its first boot, before the boot UI, given the old
 format's number. Later, moving what's on the list to the state partition would make the copy
