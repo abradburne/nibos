@@ -22,8 +22,11 @@ Both give one of two setups:
    build one with `tools/make-image.sh [--dslot]`. What each contains:
    [design/images.md](design/images.md). *Check:* `sha256sum -c SHA256SUMS --ignore-missing`
    (`shasum -a 256 -c` on a Mac).
-2. **Write it** to a microSD card of 16 GB or more with any imaging tool (it erases the card).
-   Writing a newer image over a card that was set up by nibOS 0.1.0-alpha1 or later keeps its
+2. **Write it** to a microSD card of 16 GB or more (it erases the card): with Raspberry Pi
+   Imager (Use custom, the `.img.xz` as it is) or `xzcat <image> | sudo dd of=<card> bs=4M`.
+   balenaEtcher 2.1.6 (on macOS) writes a `.img.xz` wrongly, and the card doesn't start;
+   unpack it first and give it the `.img`. If the computer calls the card unreadable or
+   offers to format it, say no (Ignore or Eject, never Initialise). Writing a newer image over a card that was set up by nibOS 0.1.0-alpha1 or later keeps its
    NIBOS-DATA partition, games and saves included; a card set up by anything older is erased
    once. Copying your saves off first is still wise.
 3. **Set it up.** On the card's `NIBOS` partition, copy `provision.toml.example` to
