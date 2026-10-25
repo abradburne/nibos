@@ -174,18 +174,26 @@ same root).
 | Slot B unconfirmed, DSlot crashed into the safe mode | "Go back to the previous version" listed; chosen: slot A, restarted |
 | Boot time | Kernel start 0.65 s, as before |
 
+Phase 2, on the test card (0.1.0-test1 with the d6ea911 kernel and SPL, 2026-10-25):
+
+| Test | Result |
+|---|---|
+| A good slot after the update | Boots with the watchdog in IRQ mode: systemd's "pretimeout of 11s with governor 'panic'", 22 s in all |
+| A panic (`echo c > /proc/sysrq-trigger`) | Back in 25 s, Falcon, slot A |
+| A watchdog left unfed on a good slot (systemd's off; a process opens it as systemd does and never pings again) | Panics and comes back, 5/5, ~45-50 s from the last ping |
+| Slot B on trial with `init=/usr/bin/cat` (the kernel feeds the watchdog for 60 s, then nothing does), `try B` | Three tries, then slot A by itself, back 241 s after the restart; the block says A, B 0 tries |
+
+Before the fix the same unfed watchdog and the same slot B left the board dark until it was
+switched off by hand (above).
+
 Notes: `/proc/self/mounts` names the root `/dev/root`, so the root's partition is found by its
 device number. Images build the same SPL; with no block on a fresh card it boots slot A, and
 an updater writes the first block.
 
 ## Not yet
 
-- **Phase 2's test on a device**: SPL arms the watchdog for a slot on trial, in IRQ mode (built,
-  above). To test: a panic restarting through the PMIC (`echo c > /proc/sysrq-trigger`); a
-  watchdog left unfed on a good slot restarting by itself; a slot on trial whose init never
-  starts systemd (`init=/usr/bin/cat` in its FIT) restarting three times and handing back; a
-  userspace hang (DSlot's unit `ExecStart=/bin/sleep infinity`, the splash never taken over)
-  as a failed try.
+- A userspace hang as a failed try (DSlot's unit `ExecStart=/bin/sleep infinity`, the splash
+  never taken over).
 - **Phase 3: the fallback follows the good slot.** Today holding A boots `/boot` on root A
   with the plain command line; U-Boot proper can read the block (`mmc read`) and pick the
   `extlinux.conf` on the good slot's root instead.
