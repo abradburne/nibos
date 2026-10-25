@@ -581,7 +581,7 @@ pub fn write_root(
     let total = m.root.chunks.len();
     if target.seek(SeekFrom::End(0))? < m.root.size {
         return Err(Error::refused(
-            "slot_too_small",
+            "no_space",
             "the root doesn't fit the slot's partition",
         ));
     }
@@ -940,7 +940,7 @@ mod tests {
             &AtomicBool::new(false),
             &mut |_, _| {},
         );
-        assert_eq!(r.unwrap_err().code(), "slot_too_small");
+        assert_eq!(r.unwrap_err().code(), "no_space");
     }
 
     // A test key and signature made with `minisign -G -W` and `minisign -S` (not nibOS's key).

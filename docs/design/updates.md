@@ -138,8 +138,8 @@ falls back to `detail` for one it doesn't. What curl itself said goes to the jou
 | `card_error` | `error` | A chunk read back from the card differs: the card may be failing |
 | `low_battery` | `error` | Under 30% and unplugged |
 | `not_confirmed` | `error` | The running version isn't confirmed good yet |
-| `no_second_slot` | `error` | A card without slot B (a development card) |
-| `slot_too_small` | `error` | The release's root doesn't fit the slot |
+| `no_slot` | `error` | A card without slot B (a development card) |
+| `no_space` | `error` | The release's root doesn't fit the slot |
 | `nothing_pending`, `not_written` | `error` | A step out of order: download before a check, apply before the download is done |
 | `no_rollback` | `error` | Going back asked for, but the other slot isn't good |
 | `no_update_source`, `no_update_key` | `error` | An image built without an update repository or key |

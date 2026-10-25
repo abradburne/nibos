@@ -312,7 +312,7 @@ fn running() -> char {
     }
     running_slot(&fs::read_to_string("/proc/cmdline").unwrap_or_default()).unwrap_or_else(|| {
         fail_code(
-            "no_second_slot",
+            "no_slot",
             "this system isn't on an A/B slot (a development card)",
         )
     })
@@ -340,7 +340,7 @@ fn download() {
     let target_slot = if running() == 'A' { 'B' } else { 'A' };
     let dev = slot_device(target_slot);
     if !dev.exists() {
-        fail_code("no_second_slot", "this card has no second slot");
+        fail_code("no_slot", "this card has no second slot");
     }
     let base = read(state("source"))
         .unwrap_or_else(|| fail_code("nothing_pending", "no source: check again"));
