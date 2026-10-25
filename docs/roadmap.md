@@ -13,13 +13,12 @@ on both screens ([AGENTS.md](../AGENTS.md)).
 
 A device should get fixes without a card reader, and never be left unbootable by one.
 
-- **Rollback**: A/B slots, phase 1 done ([design/ab-rollback.md](design/ab-rollback.md)): SPL
-  boots the slot the boot control block says, an unconfirmed slot gets three tries and then the
-  other one takes over, a slot is confirmed once its boot UI is up, and the safe mode offers to
-  go back. **Phase 2**, SPL arming the watchdog for a slot on trial (hangs before systemd count
-  as failures), is built and waits for its device test;
-  **phase 3**, the fallback U-Boot follows the good slot; **phase 4**, the updater that writes
-  a slot (below).
+- **Rollback**: A/B slots, phases 1 and 2 done ([design/ab-rollback.md](design/ab-rollback.md)):
+  SPL boots the slot the boot control block says, an unconfirmed slot gets three tries and then
+  the other one takes over, a slot is confirmed once its boot UI is up, the safe mode offers to
+  go back, and a slot on trial boots with the watchdog running, so a hang before systemd counts
+  as a failed try. The updater that writes a slot is built ([design/updates.md](design/updates.md));
+  next, **phase 3**: the fallback U-Boot follows the good slot.
 - **One-file updates**: copy a signed update file to the card's root and restart; the OS is
   updated, games, saves and settings are kept, and no network is needed. It uses the same
   signing key and layout as the network updates, and the A/B root partitions the images already
