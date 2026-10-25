@@ -17,7 +17,7 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 libsdl2-dev
+          sudo apt-get install -y python3 libsdl2-dev libarchive-tools
       # shellcheck as make check runs it locally (0.11.0): Ubuntu's 0.9.0 has other defaults
       # (SC2002, SC2015 and SC2317 notes the newer one doesn't make here).
       - name: shellcheck 0.11.0
