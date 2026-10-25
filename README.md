@@ -13,10 +13,11 @@ everything on the board works, including deep sleep with Wi-Fi back on wake.
 |---|---|
 | Board | Anbernic RG DS+ (RK3568). Other handhelds are a goal for later; the layout is ready for them ([boards/](boards/README.md)) |
 | Bootloader | Mainline U-Boot v2026.10, SPL in Falcon mode: the kernel starts **0.65 s** after reset |
-| Kernel | Mainline Linux 7.3-rc7, the board's device tree, twelve patches (panels, boot time, Wi-Fi suspend, charging, the speakers after a wake) |
+| Kernel | Mainline Linux 7.3-rc7, the board's device tree, thirteen patches (panels, boot time, Wi-Fi suspend, charging, the speakers after a wake, the watchdog) |
 | Userland | Arch Linux ARM with systemd, trimmed until init to a shell takes 2.5–3 s |
 | Boot UI | DSlot's game shelf on both screens; the emulators it starts are separate projects |
 | Recovery | DSlot restarted after a crash, then a safe mode; the hardware watchdog; A/B slots that fall back from a bad update by themselves; hold A for the fallback ([recovery.md](docs/recovery.md)) |
+| Updates | Signed releases written to the slot that isn't running and kept only once they come up: DSlot's System → Update page, or `nib update` ([design/updates.md](docs/design/updates.md)) |
 
 Everything here is written to be read: each script, patch and unit says what it does and why,
 and the measurements behind it are kept, with how to take them again.

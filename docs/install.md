@@ -255,8 +255,9 @@ From the least to the most drastic ([recovery.md](recovery.md) has each in full)
 
 The [roadmap](roadmap.md) has each with what "done" means:
 
-- **a kernel package, a signed package repository and `nib update`** with rollback, instead of
-  rebuilding and redeploying or writing a new image ([roadmap 1](roadmap.md#1-updates));
+- **updates for a development card**: a kernel package and a signed package repository, instead
+  of rebuilding and redeploying (an image card updates itself: `nib update`,
+  [design/updates.md](design/updates.md); [roadmap 1](roadmap.md#1-updates));
 - **published packages** of DSlot and the emulators for a development card, instead of
   building each from a checkout;
 - **card tools that don't need a Mac.**
