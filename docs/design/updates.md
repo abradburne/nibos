@@ -114,6 +114,37 @@ and `updated_to` or `failed` after an update. `nib update` and DSlot start the s
 priority (`Nice=19`, `IOSchedulingClass=idle`, `CPUWeight=1`), so a game keeps its frame time
 while a download writes, and stopping `nibos-update@download` pauses it.
 
+With `error` and `current` comes `code`, which stays the same from release to release, and
+`detail`, a sentence for a person. A front end words the codes it knows its own way, and
+falls back to `detail` for one it doesn't. What curl itself said goes to the journal only
+(`journalctl -u 'nibos-update@*'`), never into the status.
+
+| `code` | Phase | Meaning |
+|---|---|---|
+| `none_published` | `current` | No release for this device on its channel, or the releases aren't public (the repository answers 404): "no updates yet", not a failure |
+| `up_to_date` | `current` | The newest release is the one running |
+| `older` | `current` | The release on offer is older than the one running |
+| `needs_intermediate` | `current` | The release needs a newer version first (`min_from`) |
+| `not_for_device` | `current` | The release is for another board or edition |
+| `no_network` | `error` | No connection: no DNS, refused, timed out, dropped |
+| `tls_error` | `error` | A secure connection failed, often a clock that isn't set yet |
+| `not_found` | `error` | Nothing at the address (HTTP 404/410): a release file that went away |
+| `rate_limited` | `error` | GitHub's rate limit (HTTP 429, or 403 from its API): try later |
+| `server_error` | `error` | HTTP 5xx: try later |
+| `http_error`, `network_error` | `error` | Another HTTP status, another curl failure |
+| `bad_signature` | `error` | The manifest isn't signed by nibOS's key |
+| `bad_manifest` | `error` | The manifest can't be read |
+| `damaged` | `error` | A chunk or FIT doesn't match the manifest (downloading again fixes it) |
+| `card_error` | `error` | A chunk read back from the card differs: the card may be failing |
+| `low_battery` | `error` | Under 30% and unplugged |
+| `not_confirmed` | `error` | The running version isn't confirmed good yet |
+| `no_second_slot` | `error` | A card without slot B (a development card) |
+| `slot_too_small` | `error` | The release's root doesn't fit the slot |
+| `nothing_pending`, `not_written` | `error` | A step out of order: download before a check, apply before the download is done |
+| `no_rollback` | `error` | Going back asked for, but the other slot isn't good |
+| `no_update_source`, `no_update_key` | `error` | An image built without an update repository or key |
+| `io_error` | `error` | Anything else on the device (writing, mounting); `detail` says what |
+
 1. **Check**: fetch the manifest and its signature for this board and edition (from
    `/usr/lib/nibos/release`, below), verify the signature, compare versions: newer, and
    `min_from` satisfied. Reports the version, the notes and the size. A same-or-older version is
@@ -219,6 +250,7 @@ nothing.
 | A release from a file written to slot B of a card image (a loop device): every chunk verified, FIT B in place, the block unchanged until `apply` | the build machine (`tools/test-update.sh`, beside `test-image.sh`) |
 | The same, interrupted at random chunks (killed, and the loop device detached), then resumed | the build machine |
 | A tampered chunk, a bad signature, another board, another edition, an older version, `min_from` not met | the build machine |
+| Each status carries its `code`: no server (`no_network`), nothing at the address (`not_found`, from a local HTTP server), and no curl text in `detail` | the build machine |
 | A real A → B update from a local file, confirmed good; then `rollback`; then a broken update (a FIT that panics) rolling back by itself | the device, an image card |
 | Battery below 30% unplugged: refused; plugged in: allowed | the device |
 | Sleep in the middle of a download: resumes after waking | the device |

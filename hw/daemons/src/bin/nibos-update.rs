@@ -146,10 +146,20 @@ fn other_slot_good() -> bool {
         })
 }
 
-fn fail(e: impl std::fmt::Display) -> ! {
-    let msg = e.to_string();
+/// Stops with phase "error": `detail` a sentence for a person, `code` a stable code
+/// (docs/design/updates.md); curl's own text goes to the journal only.
+fn fail(e: impl Into<Error>) -> ! {
+    let e = e.into();
+    if let Some(raw) = e.raw() {
+        eprintln!("nibos-update: {raw}");
+    }
+    fail_code(e.code(), e)
+}
+
+fn fail_code(code: &str, msg: impl std::fmt::Display) -> ! {
+    let msg = msg.to_string();
     eprintln!("nibos-update: {msg}");
-    status("error", &msg, &[]);
+    status("error", &msg, &[("code", js(code))]);
     exit(1);
 }
 
@@ -170,7 +180,10 @@ fn pending() -> Option<Manifest> {
 /// the repository's releases (beta takes pre-releases too).
 fn channel_manifest(r: &Release, channel: &str) -> Result<String, Error> {
     if r.repo.is_empty() || r.image.is_empty() {
-        return Err(Error::Refused("this image has no update source".into()));
+        return Err(Error::refused(
+            "no_update_source",
+            "this image has no update source",
+        ));
     }
     let api = format!(
         "https://api.github.com/repos/{}/releases?per_page=20",
@@ -195,9 +208,10 @@ fn channel_manifest(r: &Release, channel: &str) -> Result<String, Error> {
             }
         }
     }
-    Err(Error::Refused(format!(
-        "no release on the {channel} channel for this device"
-    )))
+    Err(Error::refused(
+        "none_published",
+        format!("no release on the {channel} channel for this device"),
+    ))
 }
 
 /// Reads a manifest or its signature from a file or an address.
@@ -214,18 +228,36 @@ fn check(from: Option<String>) {
     status("checking", "", &[]);
     let place = match from {
         Some(f) => f,
-        None => channel_manifest(&r, &channel()).unwrap_or_else(|e| fail(e)),
+        None => match channel_manifest(&r, &channel()) {
+            Ok(place) => place,
+            // Nothing published for this device (or the releases aren't public yet): up to
+            // date as far as anyone can tell, not an error.
+            Err(e) if matches!(e.code(), "not_found" | "none_published") => {
+                if let Some(raw) = e.raw() {
+                    eprintln!("nibos-update: {raw}");
+                }
+                let msg = "no updates have been published for this device yet";
+                println!("{msg}");
+                status("current", msg, &[("code", js("none_published"))]);
+                return;
+            }
+            Err(e) => fail(e),
+        },
     };
     let bytes = get(&place).unwrap_or_else(|e| fail(e));
     let sig = get(&format!("{place}.minisig")).unwrap_or_else(|e| fail(e));
-    let key = fs::read_to_string(sys(PUBLIC_KEY))
-        .unwrap_or_else(|_| fail("this image has no update key: write a newer image"));
+    let key = fs::read_to_string(sys(PUBLIC_KEY)).unwrap_or_else(|_| {
+        fail_code(
+            "no_update_key",
+            "this image has no update key: write a newer image",
+        )
+    });
     let sig = String::from_utf8_lossy(&sig).into_owned();
     verify(&bytes, &sig, &key).unwrap_or_else(|e| fail(e));
     let m = Manifest::parse(&bytes).unwrap_or_else(|e| fail(e));
     let downgrade = sys(RUN).join("allow-downgrade").exists();
     if let Err(e) = applicable(&m, &r, downgrade) {
-        status("current", &e.to_string(), &[]);
+        status("current", &e.to_string(), &[("code", js(e.code()))]);
         println!("{e}");
         return;
     }
@@ -278,14 +310,21 @@ fn running() -> char {
     {
         return s;
     }
-    running_slot(&fs::read_to_string("/proc/cmdline").unwrap_or_default())
-        .unwrap_or_else(|| fail("this system isn't on an A/B slot (a development card)"))
+    running_slot(&fs::read_to_string("/proc/cmdline").unwrap_or_default()).unwrap_or_else(|| {
+        fail_code(
+            "no_second_slot",
+            "this system isn't on an A/B slot (a development card)",
+        )
+    })
 }
 
 fn preconditions() {
     power_ok(&sys(BATTERY), &sys(CHARGER), MIN_BATTERY).unwrap_or_else(|e| fail(e));
     if bootctl(&["unconfirmed"]) {
-        fail("the running system isn't confirmed yet: update once it is");
+        fail_code(
+            "not_confirmed",
+            "the running system isn't confirmed yet: update once it is",
+        );
     }
 }
 
@@ -294,28 +333,30 @@ fn download() {
         libc::signal(libc::SIGTERM, on_term as *const () as libc::sighandler_t);
     }
     let r = release();
-    let m = pending().unwrap_or_else(|| fail("nothing to download: check first"));
+    let m = pending()
+        .unwrap_or_else(|| fail_code("nothing_pending", "nothing to download: check first"));
     applicable(&m, &r, state("allow-downgrade").exists()).unwrap_or_else(|e| fail(e));
     preconditions();
     let target_slot = if running() == 'A' { 'B' } else { 'A' };
     let dev = slot_device(target_slot);
     if !dev.exists() {
-        fail("this card has no second slot");
+        fail_code("no_second_slot", "this card has no second slot");
     }
-    let base = read(state("source")).unwrap_or_else(|| fail("no source: check again"));
+    let base = read(state("source"))
+        .unwrap_or_else(|| fail_code("nothing_pending", "no source: check again"));
     let payload = format!("{base}/{}", m.payload.file);
     let mut source: Box<dyn Source> = if payload.starts_with("http") {
         Box::new(UrlSource(payload))
     } else {
-        Box::new(FileSource(
-            File::open(&payload).unwrap_or_else(|e| fail(format!("{payload}: {e}"))),
-        ))
+        Box::new(FileSource(File::open(&payload).unwrap_or_else(|e| {
+            fail_code("io_error", format!("{payload}: {e}"))
+        })))
     };
     let mut target = File::options()
         .read(true)
         .write(true)
         .open(&dev)
-        .unwrap_or_else(|e| fail(format!("{}: {e}", dev.display())));
+        .unwrap_or_else(|e| fail_code("io_error", format!("{}: {e}", dev.display())));
     let manifest_sha = update::sha256(&fs::read(state("manifest.json")).unwrap_or_default());
     let mut progress = Progress::load(&state("progress"), &manifest_sha);
     // The other slot's old contents are being written over: nothing to go back to any more.
@@ -367,7 +408,7 @@ fn download() {
     fs::write(&fit_file, &fit).unwrap_or_else(|e| fail(e));
     let slot = target_slot.to_string();
     if !bootctl(&["write-fit", &slot, &fit_file.to_string_lossy()]) {
-        fail("couldn't write the slot's FIT");
+        fail_code("io_error", "couldn't write the slot's FIT");
     }
     let _ = fs::remove_file(&fit_file);
     carry_over(&dev);
@@ -396,7 +437,7 @@ fn carry_over(dev: &Path) {
         .status()
         .is_ok_and(|s| s.success());
     if !ok {
-        fail("couldn't mount the new slot's root");
+        fail_code("io_error", "couldn't mount the new slot's root");
     }
     let list = fs::read_to_string(sys(KEEP)).unwrap_or_default();
     let mut result = Ok(());
@@ -426,7 +467,7 @@ fn carry_over(dev: &Path) {
     let _ = Command::new("sync").status();
     let _ = Command::new("umount").arg(&mnt).status();
     if let Err(e) = result {
-        fail(e);
+        fail_code("io_error", e);
     }
 }
 
@@ -437,13 +478,22 @@ fn reboot() {
 }
 
 fn apply() {
-    let m = pending().unwrap_or_else(|| fail("nothing to apply: check and download first"));
-    let ready = read(state("ready")).unwrap_or_else(|| fail("the update isn't written yet"));
+    let m = pending().unwrap_or_else(|| {
+        fail_code(
+            "nothing_pending",
+            "nothing to apply: check and download first",
+        )
+    });
+    let ready = read(state("ready"))
+        .unwrap_or_else(|| fail_code("not_written", "the update isn't written yet"));
     let (version, slot) = ready
         .split_once(' ')
-        .unwrap_or_else(|| fail("the update isn't written yet"));
+        .unwrap_or_else(|| fail_code("not_written", "the update isn't written yet"));
     if version != m.version {
-        fail("the written update isn't the pending one: download again");
+        fail_code(
+            "not_written",
+            "the written update isn't the pending one: download again",
+        );
     }
     preconditions();
     // An image's card has no boot control block until the first update (SPL boots slot A
@@ -453,13 +503,13 @@ fn apply() {
         .output()
         .is_ok_and(|o| !String::from_utf8_lossy(&o.stdout).contains("no boot control block"));
     if !has_block && !bootctl(&["init"]) {
-        fail("couldn't make the boot control block");
+        fail_code("io_error", "couldn't make the boot control block");
     }
     write(state("applied"), version).unwrap_or_else(|e| fail(e));
     let _ = write(state("previous"), &release().version);
     if !bootctl(&["try", slot]) {
         let _ = fs::remove_file(state("applied"));
-        fail("couldn't set the slot to be tried");
+        fail_code("io_error", "couldn't set the slot to be tried");
     }
     status("restarting", version, &[]);
     reboot();
@@ -467,7 +517,10 @@ fn apply() {
 
 fn rollback() {
     if !bootctl(&["rollback"]) {
-        fail("the other slot isn't good: there is nothing to go back to");
+        fail_code(
+            "no_rollback",
+            "the other slot isn't good: there is nothing to go back to",
+        );
     }
     // After the restart the slot left behind holds this version: it is the one to go back to.
     let _ = write(state("previous"), &release().version);

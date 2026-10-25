@@ -91,17 +91,60 @@ pub struct Fits {
     pub b: Piece,
 }
 
-/// What can go wrong, in words a person can act on.
+/// What can go wrong, in words a person can act on, each with a stable code (status.json's
+/// `code`, which DSlot words for itself; docs/design/updates.md lists them).
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
     Manifest(String),
     Signature(String),
     NotForThis(String),
-    Refused(String),
+    Refused {
+        code: &'static str,
+        msg: String,
+    },
     /// A chunk or piece whose bytes don't match the manifest.
     Corrupt(String),
+    /// A chunk read back from the card differs from what was written.
+    CardFailed(String),
     Cancelled,
+}
+
+impl Error {
+    pub fn refused(code: &'static str, msg: impl Into<String>) -> Error {
+        Error::Refused {
+            code,
+            msg: msg.into(),
+        }
+    }
+
+    /// The stable code for status.json.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Error::Io(e) => e
+                .get_ref()
+                .and_then(|e| e.downcast_ref::<NetError>())
+                .map_or("io_error", |n| n.code),
+            Error::Manifest(_) => "bad_manifest",
+            Error::Signature(_) => "bad_signature",
+            Error::NotForThis(_) => "not_for_device",
+            Error::Refused { code, .. } => code,
+            Error::Corrupt(_) => "damaged",
+            Error::CardFailed(_) => "card_error",
+            Error::Cancelled => "stopped",
+        }
+    }
+
+    /// curl's own words, for the journal only.
+    pub fn raw(&self) -> Option<&str> {
+        match self {
+            Error::Io(e) => e
+                .get_ref()
+                .and_then(|e| e.downcast_ref::<NetError>())
+                .map(|n| n.raw.as_str()),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Error {
@@ -111,10 +154,71 @@ impl fmt::Display for Error {
             Error::Manifest(m) => write!(f, "the release's manifest: {m}"),
             Error::Signature(m) => write!(f, "the release's signature: {m}"),
             Error::NotForThis(m) => write!(f, "not for this device: {m}"),
-            Error::Refused(m) => write!(f, "{m}"),
+            Error::Refused { msg, .. } => write!(f, "{msg}"),
             Error::Corrupt(m) => write!(f, "the download is damaged: {m}"),
+            Error::CardFailed(m) => write!(f, "{m}"),
             Error::Cancelled => write!(f, "stopped"),
         }
+    }
+}
+
+/// A download that failed: a stable code and a sentence for a person; curl's own text is kept
+/// for the journal ([`Error::raw`]).
+#[derive(Debug)]
+pub struct NetError {
+    pub code: &'static str,
+    pub detail: String,
+    pub raw: String,
+}
+
+impl fmt::Display for NetError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.detail)
+    }
+}
+
+impl std::error::Error for NetError {}
+
+/// What a failed curl run means, from its exit status and the HTTP status it saw (0: none).
+/// The HTTP status decides when there is one: under HTTP/2 a 404 can end in exit 56, not 22.
+pub fn classify(exit: Option<i32>, http: u16, url: &str) -> (&'static str, String) {
+    match http {
+        404 | 410 => (
+            "not_found",
+            "nothing is published at the update address".into(),
+        ),
+        429 => (
+            "rate_limited",
+            "the update server is busy: try again later".into(),
+        ),
+        // GitHub's API answers a spent rate limit with 403.
+        403 if url.contains("api.github.com") => (
+            "rate_limited",
+            "the update server is busy: try again later".into(),
+        ),
+        500..=599 => (
+            "server_error",
+            format!("the update server had a problem (HTTP {http}): try again later"),
+        ),
+        400..=599 => (
+            "http_error",
+            format!("the update server refused the request (HTTP {http})"),
+        ),
+        _ => match exit {
+            // Couldn't resolve, couldn't connect, timed out, the connection dropped or no reply.
+            Some(5 | 6 | 7 | 28 | 52 | 55 | 56) => (
+                "no_network",
+                "no connection to the update server: check Wi-Fi".into(),
+            ),
+            // A certificate it can't check: often the clock (no network time yet).
+            Some(35 | 58 | 59 | 60 | 77 | 83 | 90 | 91) => (
+                "tls_error",
+                "couldn't make a secure connection to the update server: check the date and time"
+                    .into(),
+            ),
+            Some(n) => ("network_error", format!("the download failed (curl {n})")),
+            None => ("network_error", "the download failed".into()),
+        },
     }
 }
 
@@ -289,20 +393,31 @@ pub fn applicable(m: &Manifest, running: &Release, allow_downgrade: bool) -> Res
         Ordering::Greater => {}
         Ordering::Equal if allow_downgrade => {}
         Ordering::Less if allow_downgrade => {}
-        Ordering::Equal => return Err(Error::Refused(format!("{} is running already", m.version))),
+        Ordering::Equal => {
+            return Err(Error::refused(
+                "up_to_date",
+                format!("{} is running already", m.version),
+            ))
+        }
         Ordering::Less => {
-            return Err(Error::Refused(format!(
-                "{} is older than {} (allow a downgrade to take it)",
-                m.version, running.version
-            )))
+            return Err(Error::refused(
+                "older",
+                format!(
+                    "{} is older than {} (allow a downgrade to take it)",
+                    m.version, running.version
+                ),
+            ))
         }
     }
     if let Some(min) = &m.min_from {
         if compare_versions(&running.version, min) == Ordering::Less {
-            return Err(Error::Refused(format!(
-                "{} updates from {min} or later: update to {min} first, or write the image",
-                m.version
-            )));
+            return Err(Error::refused(
+                "needs_intermediate",
+                format!(
+                    "{} updates from {min} or later: update to {min} first, or write the image",
+                    m.version
+                ),
+            ));
         }
     }
     Ok(())
@@ -334,8 +449,11 @@ impl Source for UrlSource {
     }
 }
 
+/// The line curl writes the HTTP status on, at the end of its stderr.
+const HTTP_MARK: &str = "nibos-http=";
+
 /// Reads an address (or a range of it) with curl, which follows redirects (GitHub's release
-/// downloads) and retries a dropped connection.
+/// downloads) and retries a dropped connection. A failure is a [`NetError`].
 pub fn fetch(url: &str, range: Option<(u64, u64)>) -> io::Result<Vec<u8>> {
     let mut cmd = Command::new("curl");
     cmd.args([
@@ -346,16 +464,30 @@ pub fn fetch(url: &str, range: Option<(u64, u64)>) -> io::Result<Vec<u8>> {
         "2",
         "--connect-timeout",
         "20",
+        "-w",
+        &format!("%{{stderr}}\n{HTTP_MARK}%{{http_code}}\n"),
     ]);
     if let Some((offset, len)) = range {
         cmd.args(["-r", &format!("{offset}-{}", offset + len - 1)]);
     }
     let out = cmd.arg(url).output()?;
     if !out.status.success() {
-        return Err(io::Error::other(format!(
-            "{url}: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let http = stderr
+            .lines()
+            .find_map(|l| l.strip_prefix(HTTP_MARK))
+            .and_then(|c| c.trim().parse().ok())
+            .unwrap_or(0);
+        let raw: Vec<&str> = stderr
+            .lines()
+            .filter(|l| !l.starts_with(HTTP_MARK) && !l.trim().is_empty())
+            .collect();
+        let (code, detail) = classify(out.status.code(), http, url);
+        return Err(io::Error::other(NetError {
+            code,
+            detail,
+            raw: format!("{url}: {}", raw.join(" ")),
+        }));
     }
     if let Some((_, len)) = range {
         if out.stdout.len() as u64 != len {
@@ -448,8 +580,9 @@ pub fn write_root(
 ) -> Result<()> {
     let total = m.root.chunks.len();
     if target.seek(SeekFrom::End(0))? < m.root.size {
-        return Err(Error::Refused(
-            "the root doesn't fit the slot's partition".into(),
+        return Err(Error::refused(
+            "slot_too_small",
+            "the root doesn't fit the slot's partition",
         ));
     }
     for (i, c) in m.root.chunks.iter().enumerate() {
@@ -476,7 +609,7 @@ pub fn write_root(
         target.write_all(&raw)?;
         target.sync_data()?;
         if sha256(&read_back(target, offset, raw.len() as u64)?) != c.raw_sha256 {
-            return Err(Error::Corrupt(format!(
+            return Err(Error::CardFailed(format!(
                 "chunk {i} read back from the card differs: the card may be failing"
             )));
         }
@@ -506,9 +639,10 @@ pub fn power_ok(battery: &Path, charger: &Path, min_percent: u32) -> Result<()> 
     match level {
         _ if plugged => Ok(()),
         Some(l) if l >= min_percent => Ok(()),
-        Some(l) => Err(Error::Refused(format!(
-            "the battery is at {l}%: charge it to {min_percent}% or plug the charger in"
-        ))),
+        Some(l) => Err(Error::refused(
+            "low_battery",
+            format!("the battery is at {l}%: charge it to {min_percent}% or plug the charger in"),
+        )),
         None => Ok(()),
     }
 }
@@ -684,17 +818,14 @@ mod tests {
         ));
         let mut newer = release();
         newer.version = "0.1.0-alpha3".into();
-        assert!(matches!(
-            applicable(&m, &newer, false),
-            Err(Error::Refused(_))
-        ));
+        assert_eq!(applicable(&m, &newer, false).unwrap_err().code(), "older");
         assert!(applicable(&m, &newer, true).is_ok());
         let mut old = release();
         old.version = "0.0.9".into();
-        assert!(matches!(
-            applicable(&m, &old, false),
-            Err(Error::Refused(_))
-        ));
+        assert_eq!(
+            applicable(&m, &old, false).unwrap_err().code(),
+            "needs_intermediate"
+        );
     }
 
     #[test]
@@ -809,7 +940,7 @@ mod tests {
             &AtomicBool::new(false),
             &mut |_, _| {},
         );
-        assert!(matches!(r, Err(Error::Refused(_))));
+        assert_eq!(r.unwrap_err().code(), "slot_too_small");
     }
 
     // A test key and signature made with `minisign -G -W` and `minisign -S` (not nibOS's key).
@@ -840,7 +971,7 @@ mod tests {
         fs::create_dir_all(&chg).unwrap();
         fs::write(bat.join("capacity"), "25\n").unwrap();
         fs::write(chg.join("online"), "0\n").unwrap();
-        assert!(matches!(power_ok(&bat, &chg, 30), Err(Error::Refused(_))));
+        assert_eq!(power_ok(&bat, &chg, 30).unwrap_err().code(), "low_battery");
         fs::write(chg.join("online"), "1\n").unwrap();
         assert!(power_ok(&bat, &chg, 30).is_ok());
         fs::write(chg.join("online"), "0\n").unwrap();
@@ -878,5 +1009,33 @@ mod tests {
                 "etc/ssh/ssh_host_ed25519_key.pub"
             ]
         );
+    }
+
+    #[test]
+    fn download_failures_have_stable_codes() {
+        let api = "https://api.github.com/repos/o/n/releases";
+        let dl = "https://github.com/o/n/releases/download/v1/x.slot";
+        // A private or missing repository: 404, whatever curl's exit (56 under HTTP/2).
+        assert_eq!(classify(Some(56), 404, api).0, "not_found");
+        assert_eq!(classify(Some(22), 404, dl).0, "not_found");
+        assert_eq!(classify(Some(22), 403, api).0, "rate_limited");
+        assert_eq!(classify(Some(22), 429, dl).0, "rate_limited");
+        assert_eq!(classify(Some(22), 403, dl).0, "http_error");
+        assert_eq!(classify(Some(22), 503, dl).0, "server_error");
+        assert_eq!(classify(Some(6), 0, dl).0, "no_network");
+        assert_eq!(classify(Some(28), 0, dl).0, "no_network");
+        assert_eq!(classify(Some(60), 0, dl).0, "tls_error");
+        assert_eq!(classify(Some(3), 0, dl).0, "network_error");
+        // The sentence for a person never carries curl's text.
+        assert!(!classify(Some(56), 404, api).1.contains("curl"));
+        let e = Error::Io(io::Error::other(NetError {
+            code: "not_found",
+            detail: "nothing is published at the update address".into(),
+            raw: "curl: (56) The requested URL returned error: 404".into(),
+        }));
+        assert_eq!(e.code(), "not_found");
+        assert_eq!(e.to_string(), "nothing is published at the update address");
+        assert!(e.raw().unwrap().contains("404"));
+        assert_eq!(Error::Io(io::Error::other("disk full")).code(), "io_error");
     }
 }

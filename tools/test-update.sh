@@ -73,22 +73,31 @@ echo "== check"
 check "a newer release from a file: available" 'nibos-update check --from "$manifest" >/dev/null && [ "$(st phase)" = available ] && [ "$(st available)" = "$newer" ]'
 cp "$tmp/test.pub" "$tmp/good.pub"
 minisign -G -W -p "$P/usr/lib/nibos/update.pub" -s "$tmp/other.key" -f >/dev/null
-check "signed with another key: refused" '! nibos-update check --from "$manifest" 2>/dev/null && [ "$(st phase)" = error ]'
+check "signed with another key: refused (bad_signature)" '! nibos-update check --from "$manifest" 2>/dev/null && [ "$(st phase)" = error ] && [ "$(st code)" = bad_signature ]'
 cp "$tmp/good.pub" "$P/usr/lib/nibos/update.pub"
 sed -i 's/^NIBOS_EDITION=.*/NIBOS_EDITION=other/' "$P/usr/lib/nibos/release"
-check "another edition: refused" 'nibos-update check --from "$manifest" >/dev/null && [ "$(st phase)" = current ]'
+check "another edition: refused (not_for_device)" 'nibos-update check --from "$manifest" >/dev/null && [ "$(st phase)" = current ] && [ "$(st code)" = not_for_device ]'
 cp "$work/docs/release" "$P/usr/lib/nibos/release"
 sed -i 's/^NIBOS_BOARD=.*/NIBOS_BOARD=other/' "$P/usr/lib/nibos/release"
-check "another board: refused" 'nibos-update check --from "$manifest" >/dev/null && [ "$(st phase)" = current ]'
+check "another board: refused (not_for_device)" 'nibos-update check --from "$manifest" >/dev/null && [ "$(st phase)" = current ] && [ "$(st code)" = not_for_device ]'
 cp "$work/docs/release" "$P/usr/lib/nibos/release"
 sed -i "s/^NIBOS_VERSION=.*/NIBOS_VERSION=$newer/" "$P/usr/lib/nibos/release"
-check "the same version: not offered" 'nibos-update check --from "$manifest" >/dev/null && [ "$(st phase)" = current ]'
+check "the same version: not offered (up_to_date)" 'nibos-update check --from "$manifest" >/dev/null && [ "$(st phase)" = current ] && [ "$(st code)" = up_to_date ]'
 cp "$work/docs/release" "$P/usr/lib/nibos/release"
+# Over the network: no server at all, then a server with nothing at the address. The status
+# says a code and a sentence, never curl's own words (those go to the journal).
+check "no server: no_network, no curl text" '! nibos-update check --from http://127.0.0.1:9/x.manifest.json 2>/dev/null && [ "$(st phase)" = error ] && [ "$(st code)" = no_network ] && ! st detail | grep -qi curl'
+mkdir -p "$tmp/www"
+python3 -m http.server 8731 --bind 127.0.0.1 --directory "$tmp/www" >/dev/null 2>&1 &
+www=$!
+for _ in $(seq 50); do curl -s -o /dev/null http://127.0.0.1:8731/ && break; sleep 0.1; done
+check "nothing at the address: not_found, no curl text" '! nibos-update check --from http://127.0.0.1:8731/x.manifest.json 2>/dev/null && [ "$(st phase)" = error ] && [ "$(st code)" = not_found ] && ! st detail | grep -qi curl'
+kill "$www"
 check "back to the newer release" 'nibos-update check --from "$manifest" >/dev/null && [ "$(st phase)" = available ]'
 
 echo "== download"
 echo 20 > "$P/run/nibos/battery/capacity"
-check "at 20% unplugged: refused" '! nibos-update download 2>/dev/null'
+check "at 20% unplugged: refused (low_battery)" '! nibos-update download 2>/dev/null && [ "$(st code)" = low_battery ]'
 echo 1 > "$P/run/nibos/charger/online"
 total=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["root"]["chunks"]))' "$manifest")
 # Stopped part way (SIGTERM, as stopping its unit does), then resumed.
@@ -129,7 +138,7 @@ with open(sys.argv[1], "r+b") as f:
     f.write(bytes([b[0] ^ 1]))
 PY
 rm -f "$P/var/lib/nibos/state/update/progress" "$P/var/lib/nibos/state/update/ready"
-check "a damaged chunk: refused, not ready, the failed step named" '! nibos-update download 2>/dev/null && [ "$(st phase)" = error ] && [ "$(st step)" = download ] && [ ! -e "$P/var/lib/nibos/state/update/ready" ]'
+check "a damaged chunk: refused (damaged), not ready, the failed step named" '! nibos-update download 2>/dev/null && [ "$(st phase)" = error ] && [ "$(st code)" = damaged ] && [ "$(st step)" = download ] && [ ! -e "$P/var/lib/nibos/state/update/ready" ]'
 check "nothing to apply" '! nibos-update apply 2>/dev/null && nibos-bootctl status | grep -q "no boot control block"'
 cp "$tmp/good.slot" "$payload"
 check "the good one again: ready" 'nibos-update download >/dev/null && [ "$(st phase)" = ready ]'
