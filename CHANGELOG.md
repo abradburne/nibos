@@ -19,6 +19,10 @@ Arch Linux ARM, the `nibos-hw` hardware layer, and DSlot as the boot UI.
 - **Recovery**: A/B slots with automatic rollback from an unconfirmed slot, DSlot restarted
   after a crash and then a safe mode, the hardware watchdog, panics that restart, and a
   known-good fallback when A is held at power-on ([recovery.md](docs/recovery.md)).
+- **System updates**: signed releases written to the slot that isn't running, tried, and kept
+  only once the new version comes up; from DSlot's System → Update page or `nib update`
+  ([design/updates.md](docs/design/updates.md)). A hang restarts the device by itself (the
+  watchdog panics, and the panic restarts through the PMIC).
 - **Two image editions**, base (a shell) and DSlot, set up at first boot from
   `provision.toml` with no credentials baked in; the host answers as `nibos.local`, user
   `nibos` ([install.md](docs/install.md), [design/images.md](docs/design/images.md)).
