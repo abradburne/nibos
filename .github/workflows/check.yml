@@ -17,7 +17,20 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck python3 libsdl2-dev
+          sudo apt-get install -y python3 libsdl2-dev
+      # shellcheck as make check runs it locally (0.11.0): Ubuntu's 0.9.0 has other defaults
+      # (SC2002, SC2015 and SC2317 notes the newer one doesn't make here).
+      - name: shellcheck 0.11.0
+        env:
+          VERSION: v0.11.0
+          SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          f=shellcheck-$VERSION.linux.x86_64.tar.xz
+          curl -fsSLO "https://github.com/koalaman/shellcheck/releases/download/$VERSION/$f"
+          echo "$SHA256  $f" | sha256sum -c -
+          tar -xf "$f"
+          sudo install -m755 "shellcheck-$VERSION/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
