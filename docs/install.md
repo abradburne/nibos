@@ -35,7 +35,11 @@ Both give one of two setups:
 4. **Boot.** The card in the slot marked TF1, power on. The first start makes the data
    partition (NIBOS-DATA) over the rest of the card; `provision.toml` is applied and erased
    (a file with a mistake is renamed `provision.rejected-N.toml`, with `provision.error.txt`
-   saying why, and nothing in it is applied).
+   saying why, and nothing in it is applied). About a minute after the first start, with the
+   shelf already up, nibOS reads the card once and checks that the system is exactly what the
+   image shipped. A card an imaging tool wrote wrongly often boots and then fails in odd ways (one
+   emulator quits at once while another runs); DSlot then says so on the shelf, and the way out
+   is to write the image again with Raspberry Pi Imager or `dd` ([recovery.md](recovery.md#a-card-that-wasnt-written-right)).
 
 Then:
 

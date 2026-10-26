@@ -58,6 +58,28 @@ taken out (Wi-Fi names and passphrases, MAC and IP addresses, the hostname) to
 nibOS's bug tracker (`/etc/nibos/bug-report.conf`) and prints a code to quote. A tracker that
 is down costs a minute and a message; the file is on the card either way.
 
+## A card that wasn't written right
+
+An image written wrongly (balenaEtcher 2.1.6 on macOS and a `.img.xz`, a card reader that
+drops bytes, a card going bad) often still boots: the kernel and most of the system are whole,
+and one program isn't. The usual sign is one emulator quitting the moment a game starts while
+another runs. Once per write of the card, about a minute after the first start and at idle
+priority, `nibos-root-verify` reads every file the image shipped under `/usr` and `/boot` and
+checks it against the SHA-256 list the build wrote (`/usr/lib/nibos/root-files.sha256`). The
+verdict is in `/var/lib/nibos/state/root-verified` (`result=ok` or `result=bad`, with the first
+files that differ), and in the journal:
+
+```bash
+cat /var/lib/nibos/state/root-verified
+journalctl -u nibos-root-verify
+```
+
+On a bad verdict DSlot shows "This card was not written correctly" on the shelf at every start,
+and `nib update download` and `nib update apply` refuse: an update written from a damaged
+system can't be trusted either. The fix is to write the image again
+([install.md](install.md#writing-an-image)), with Raspberry Pi Imager or `dd`; NIBOS-DATA
+(games, saves) is kept. A card that fails the check twice is probably failing itself.
+
 ## 3. Back to the stock bootloader (development card, Mac)
 
 If the card doesn't boot even with A held, put it in a Mac and run:

@@ -97,6 +97,18 @@ leaves the GPT in sectors 1-33 alone):
 4. **Radios.** Wi-Fi and Bluetooth start off on a fresh card until each is switched on (DSlot's
    switches, `nib wifi on`, `nib bluetooth on`) or, for Wi-Fi, `provision.toml` names a
    network; after that systemd-rfkill keeps each choice.
+5. **The root against the image, once.** `nibos-root-verify.timer` starts
+   `/usr/lib/nibos/root-verify` 45 s after the start, at idle IO and CPU priority, never on the
+   boot path. It checks every file the image shipped under `/usr` and `/boot` against
+   `/usr/lib/nibos/root-files.sha256`, which `rootfs/make-arch.sh` writes last (the files, not
+   the partition: the root is mounted read-write and grown to its partition on the first boot,
+   so its bytes never match the image again). The verdict goes to p5 as `root-verified`, with
+   the list's hash, so each root is read once (about a minute); a write of the image makes p5
+   afresh, so the next write is checked again. Bad: a line in the journal,
+   `/run/nibos/notice/root-verify` for DSlot's shelf (the first line is the message, then the
+   marker's details), and `nib update` refuses to download or apply. A card an imaging tool
+   wrote wrongly often boots and then fails in odd ways; this names the cause
+   ([recovery.md](../recovery.md#a-card-that-wasnt-written-right)).
 
 ## The speaker amps' tuning file
 
@@ -145,4 +157,6 @@ Each image, written to a spare card: boot time, both screens, input, audio (head
 speakers with each tuning), sleep and wake, the unplug tests
 ([battery.md](../engineering/battery.md)), Wi-Fi and SSH from `provision.toml`, a bad
 `provision.toml`, the data partition after a power cut during the first boot, and on the DSlot
-edition the shelf and a game from each emulator.
+edition the shelf and a game from each emulator. Without a device, `tools/test-image.sh` checks
+the image's root and NIBOS partition, the root check on a copy as written and with one block of
+a file zeroed, the first boot's data partition, and the first and later starts in a container.

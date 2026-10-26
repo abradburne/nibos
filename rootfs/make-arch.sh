@@ -289,7 +289,12 @@ if [ "$for_image" = 1 ]; then
     chroot "$root" systemctl enable nibos-goodbye.service >/dev/null
     # SSH only once provision.toml gives a key (nibos-provision enables sshd.socket).
     rm -f "$root/etc/systemd/system/sockets.target.wants/sshd.socket"
-    chroot "$root" systemctl enable nibos-provision nibos-firstboot-data >/dev/null
+    # Every file the image ships under /usr and /boot with its SHA-256, for the one-time check
+    # after the first boot that the card was written right (nibos-root-verify, image/files/).
+    # Written last: nothing below changes those trees (enabling units writes /etc).
+    (cd "$root" && find usr boot -type f ! -path usr/lib/nibos/root-files.sha256 -print0 |
+        LC_ALL=C sort -z | xargs -0 sha256sum) > "$root/usr/lib/nibos/root-files.sha256"
+    chroot "$root" systemctl enable nibos-provision nibos-firstboot-data nibos-root-verify.timer >/dev/null
 fi
 
 # Pack it. The image is small; the partition is grown on the device.

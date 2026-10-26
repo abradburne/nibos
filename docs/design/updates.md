@@ -152,7 +152,9 @@ falls back to `detail` for one it doesn't. What curl itself said goes to the jou
 2. **Preconditions**, checked before writing and again before applying: the battery at 30% or
    more, or the charger in; the running slot confirmed good (no update on top of an update
    still on trial); the inactive slot's partition exists and is the slot's size; the release's
-   board and edition are this device's.
+   board and edition are this device's. `nib update download` and `apply` also refuse on a card
+   whose root doesn't match the image it was written from (`nibos-root-verify`,
+   [images.md](images.md#first-boot-and-provisioning)): write the image again first.
 3. **Download and write**, chunk by chunk: fetch (curl with range requests), check the
    compressed hash, decompress, write at the chunk's offset in the inactive root partition
    (`O_DIRECT`), sync, read back, check the raw hash. The verified chunks are listed in

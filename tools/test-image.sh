@@ -1,8 +1,10 @@
 #!/bin/bash
 # Check a downloadable image without a device, in the build machine (as root): what's in its
-# root and on its NIBOS partition, and the first boot's data partition on a copy made card
-# sized, including resuming after a power cut, leaving a foreign file system alone, and the
-# card written again (with this image, and with OTHER, the other edition's, if given).
+# root and on its NIBOS partition, the one-time check of the root against the image (on the
+# copy as written, and with its root deliberately damaged), and the first boot's data partition
+# on a copy made card sized, including resuming after a power cut, leaving a foreign file system
+# alone, and the card written again (with this image, and with OTHER, the other edition's, if
+# given).
 #   orb -m rgbuild sudo bash tools/test-image.sh out/nibos-<version>-<board>.img.xz [OTHER]
 # shellcheck disable=SC2016 # each check is a string, evaluated by check()
 set -euo pipefail
@@ -71,6 +73,8 @@ check "firmware_class.path on the command line" 'grep -q "firmware_class.path=/v
 check "NOTICE and packages.txt" '[ -s "$r/usr/share/doc/nibos/NOTICE" ] && [ -s "$r/usr/share/doc/nibos/packages.txt" ]'
 check "rkbin's licence" '[ -s "$r/usr/share/licenses/rkbin/LICENSE" ]'
 check "the builder's SSH key isn't anywhere" '! grep -rqs "$(cut -d" " -f2 /root/.ssh/id_ed25519.pub 2>/dev/null || echo none-here)" "$r/root" "$r/home" "$r/etc"'
+check "the root's file list for the check after the first boot" '[ -s "$r/usr/lib/nibos/root-files.sha256" ] && grep -q "  usr/bin/bash$" "$r/usr/lib/nibos/root-files.sha256" && grep -q "  boot/extlinux/extlinux.conf$" "$r/usr/lib/nibos/root-files.sha256"'
+check "nibos-root-verify on (its timer)" '[ -L "$r/etc/systemd/system/timers.target.wants/nibos-root-verify.timer" ] && [ -x "$r/usr/lib/nibos/root-verify" ]'
 if [ -e "$r/usr/bin/dslot" ]; then
     echo "== the DSlot edition"
     # shellcheck disable=SC2034 # used in the checks
@@ -86,6 +90,32 @@ if [ -e "$r/usr/bin/dslot" ]; then
     check "the fonts' OFL" '[ -s "$r/usr/share/licenses/dslot/OFL.txt" ]'
     check "NOTICE names DSlot, DSperate, inkdot" 'grep -q "^- DSlot" "$r/usr/share/doc/nibos/NOTICE" && grep -q "^- DSperate" "$r/usr/share/doc/nibos/NOTICE" && grep -q "^- inkdot" "$r/usr/share/doc/nibos/NOTICE"'
 fi
+umount "$r"
+
+echo "== the root against the image (nibos-root-verify)"
+# The script from this tree against the copy's root, as written and then with one block of a
+# file zeroed (as a card written wrongly has it), the marker and the notice in $tmp.
+rv=$tmp/root-verify
+cp "$(dirname "$0")/../rootfs/image/files/usr/lib/nibos/root-verify" "$rv"
+rm -rf "$tmp/rv-state" "$tmp/rv-run"
+mkdir -p "$tmp/rv-state" "$tmp/rv-run"
+run_rv() { ROOT=$1 MARKER="$tmp/rv-state/root-verified" NOTICE_DIR="$tmp/rv-run/notice" sh "$rv" 2>&1; }
+r=$(mnt root "${loop}p3")
+check "an intact copy: ok" 'run_rv "$r" | grep -q "files match the image" && grep -qx "result=ok" "$tmp/rv-state/root-verified" && [ ! -e "$tmp/rv-run/notice/root-verify" ]'
+check "a second run reads nothing" '[ "$(run_rv "$r")" = "root-verify: already checked: ok" ]'
+umount "$r"
+victim=/usr/share/licenses/rkbin/LICENSE
+blocksize=$(dumpe2fs -h "${loop}p3" 2>/dev/null | awk -F: '/^Block size/ { gsub(/ /, "", $2); print $2 }')
+block=$(debugfs -R "bmap $victim 0" "${loop}p3" 2>/dev/null | tr -d ' ')
+check "found a block of $victim to damage" '[ -n "$block" ] && [ "$block" -gt 0 ] && [ -n "$blocksize" ]'
+[ -z "$block" ] || dd if=/dev/zero of="${loop}p3" bs="${blocksize:-4096}" seek="$block" count=1 conv=notrunc status=none
+sync
+rm -f "$tmp/rv-state/root-verified"
+r=$(mnt root "${loop}p3")
+check "a damaged copy: bad, named in the marker" 'run_rv "$r" | grep -q "not written correctly" && grep -qx "result=bad" "$tmp/rv-state/root-verified" && grep -q "^bad: ${victim#/}: FAILED" "$tmp/rv-state/root-verified"'
+check "a damaged copy: the notice for DSlot" '[ "$(head -n1 "$tmp/rv-run/notice/root-verify")" = "This card was not written correctly: write the image again with Raspberry Pi Imager or dd (docs/install.md)" ]'
+rm -f "$tmp/rv-run/notice/root-verify"
+check "a damaged copy: announced again without reading" '[ "$(run_rv "$r" | head -n1)" = "root-verify: already checked: bad" ] && [ -s "$tmp/rv-run/notice/root-verify" ]'
 umount "$r"
 
 echo "== NIBOS"
@@ -214,6 +244,10 @@ sleep 1
 check "reading iwd without auto-start doesn't start it" 'inactive iwd.service && inactive nibos-network-modules.service'
 check "system updates: nibOS's update key" 'grep -q "^untrusted comment: minisign public key 41B02B0D6ED49D26$" "$r/usr/lib/nibos/update.pub"'
 check "system updates: the release file, nibos-update, its boot step and keep list" 'grep -q "^NIBOS_VERSION=." "$r/usr/lib/nibos/release" && grep -q "^NIBOS_UPDATE_REPO=." "$r/usr/lib/nibos/release" && [ -x "$r/usr/bin/nibos-update" ] && [ -x "$r/usr/lib/nibos/nib-update" ] && [ -L "$r/etc/systemd/system/multi-user.target.wants/nibos-update-boot.service" ] && [ -s "$r/usr/lib/nibos/update-keep" ]'
+# The timer fires at once in a container (OnBootSec counts from the host's start); the check
+# reads the whole of /usr, so give it a while.
+for _ in $(seq 180); do grep -qs "^result=" "$s/root-verified" && break; sleep 1; done
+check "nibos-root-verify ran once after the start and found the root whole" '[ "$(systemctl -M "$machine" show -p Result --value nibos-root-verify.service)" = success ] && grep -qx "result=ok" "$s/root-verified"'
 check "the update step at boot ran and said where it stands" '[ "$(systemctl -M "$machine" show -p Result --value nibos-update-boot.service)" = success ] && in_machine cat /run/nibos/update/status.json | grep -q "\"phase\":\"idle\""'
 check "the radios' switches: nib bluetooth and the restore at boot" '[ -x "$r/usr/lib/nibos/nib-bluetooth" ] && [ -L "$r/etc/systemd/system/multi-user.target.wants/nibos-radios-restore.service" ]'
 halt

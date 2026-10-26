@@ -1,0 +1,13 @@
+# nibos (a downloadable image; rootfs/image/): nibos-root-verify.service, once the start has
+# settled (a timer, so it is never ordered into the boot path). The service itself returns at
+# once when this root was checked already.
+[Unit]
+Description=Check the root file system against the image, after the start settles
+ConditionPathExists=/usr/lib/nibos/root-files.sha256
+
+[Timer]
+OnBootSec=45s
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

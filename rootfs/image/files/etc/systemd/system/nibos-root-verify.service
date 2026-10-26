@@ -1,0 +1,15 @@
+# nibos (a downloadable image; rootfs/image/): once per write of the card, after the first boot
+# has settled, check every file the image shipped under /usr and /boot against its SHA-256 list
+# (/usr/lib/nibos/root-verify). Started by nibos-root-verify.timer, well after DSlot is up, at
+# idle IO and CPU priority: about a minute of reading the card once, and never on the boot path.
+[Unit]
+Description=Check the root file system against the image (once per write)
+RequiresMountsFor=/var/lib/nibos/state
+After=nibos-firstboot-data.service nibos-growfs.service dslot.service
+ConditionPathExists=/usr/lib/nibos/root-files.sha256
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/nibos/root-verify
+Nice=19
+IOSchedulingClass=idle

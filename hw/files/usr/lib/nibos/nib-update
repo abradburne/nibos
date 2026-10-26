@@ -11,11 +11,21 @@
 #   nib update channel stable|beta
 #   nib update --allow-downgrade check ...   take an older release
 #
-# Each step is nibos-update@<step>.service (root); the wheel group may start them.
+# Each step is nibos-update@<step>.service (root); the wheel group may start them. On a card
+# that wasn't written right (nibos-root-verify found the root differs from the image),
+# download and apply are refused: write the image again instead.
 set -eu
 run=/run/nibos/update
 step() { systemctl start --wait "nibos-update@$1.service" || true; nibos-update show; }
 if [ "${1:-}" = --allow-downgrade ]; then : > "$run/allow-downgrade"; shift; else rm -f "$run/allow-downgrade" 2>/dev/null || true; fi
+verified=/var/lib/nibos/state/root-verified
+case "${1:-}" in
+download | apply)
+    if grep -qs '^result=bad' "$verified"; then
+        echo "nib update: this card was not written correctly (the root differs from the image, $verified): write the image again rather than updating (docs/install.md)" >&2
+        exit 1
+    fi ;;
+esac
 case "${1:-show}" in
 show) nibos-update show ;;
 check)

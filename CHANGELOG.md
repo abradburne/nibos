@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **A card that wasn't written right says so.** Once per write of the card, about a minute
+  after the first start and at idle priority, `nibos-root-verify` checks every file the image
+  shipped under `/usr` and `/boot` against the SHA-256 list the build wrote. A mismatch is in
+  the journal and `/var/lib/nibos/state/root-verified`, DSlot shows "This card was not written
+  correctly" on the shelf, and `nib update` refuses to update over it
+  ([recovery.md](docs/recovery.md#a-card-that-wasnt-written-right)). The usual cause is an
+  imaging tool writing a `.img.xz` wrongly: one emulator quits at once while another runs.
+
 ## 0.1.0-alpha2
 
 - **Starting without a card in TF2 no longer takes minutes.** `/mnt/ds` was an automount

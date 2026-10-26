@@ -1,0 +1,71 @@
+#!/bin/sh
+# nibos-root-verify (a downloadable image; docs/design/images.md): once per write of the card,
+# after the first boot has settled, checks that the root holds what the image shipped: every
+# file under /usr and /boot against the SHA-256 list the build wrote
+# (/usr/lib/nibos/root-files.sha256, rootfs/make-arch.sh). A card an imaging tool wrote wrongly
+# still boots, and then some programs are broken (a large emulator quits at once while a small
+# one runs); this says so instead of leaving it a mystery. The files, not the partition: the
+# root is mounted read-write and grown to its partition on the first boot, so its bytes never
+# match the image again, while what the image shipped under /usr and /boot doesn't change.
+#
+# The verdict goes to /var/lib/nibos/state/root-verified (on the state partition, fresh with
+# every write of the image), with the list's own hash, so each root is read once: a bad verdict
+# is only announced again at later starts. Bad: a line in the journal, a notice for DSlot's
+# shelf in /run/nibos/notice/root-verify (the first line is the message), and `nib update`
+# refuses to update over it. ROOT, LIST, MARKER and NOTICE_DIR override the places (for
+# tools/test-image.sh).
+set -eu
+root=${ROOT:-/}
+list=${LIST:-$root/usr/lib/nibos/root-files.sha256}
+marker=${MARKER:-/var/lib/nibos/state/root-verified}
+notice_dir=${NOTICE_DIR:-/run/nibos/notice}
+message="This card was not written correctly: write the image again with Raspberry Pi Imager or dd (docs/install.md)"
+
+[ -s "$list" ] || { echo "root-verify: no $list: nothing to check against" >&2; exit 0; }
+list_hash=$(sha256sum "$list" | cut -c1-64)
+release() { sed -n "s/^$1=//p" "$root/usr/lib/nibos/release" 2>/dev/null | head -n1; }
+
+announce_bad() {
+    echo "root-verify: $message" >&2
+    mkdir -p "$notice_dir"
+    { echo "$message"; echo; sed -n '2,$p' "$marker"; } > "$notice_dir/root-verify.tmp"
+    mv "$notice_dir/root-verify.tmp" "$notice_dir/root-verify"
+}
+
+if [ -f "$marker" ] && [ "$(sed -n 's/^list=//p' "$marker")" = "$list_hash" ]; then
+    case "$(sed -n 's/^result=//p' "$marker")" in
+    ok) echo "root-verify: already checked: ok"; exit 0 ;;
+    bad) echo "root-verify: already checked: bad" >&2; announce_bad; exit 0 ;;
+    esac
+fi
+
+# Every file in the list, read once. --strict: a damaged line in the list itself counts too.
+status=0
+out=$(cd "$root" && sha256sum --quiet --strict -c "$list" 2>&1) || status=$?
+failed=$(printf '%s\n' "$out" | grep -c ': FAILED' || true)
+total=$(grep -c . "$list" || true)
+{
+    if [ "$status" = 0 ]; then echo "result=ok"; else echo "result=bad"; fi
+    echo "files=$total"
+    echo "failed=$failed"
+    echo "version=$(release NIBOS_VERSION)"
+    echo "build=$(release NIBOS_BUILD)"
+    echo "list=$list_hash"
+    echo "checked=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [ "$status" != 0 ]; then
+        # The first few that differ, as sha256sum names them.
+        printf '%s\n' "$out" | grep -v '^sha256sum: WARNING' | head -n 10 | sed 's/^/bad: /'
+    fi
+} > "$marker.tmp"
+sync "$marker.tmp"
+mv "$marker.tmp" "$marker"
+sync "$marker"
+
+if [ "$status" = 0 ]; then
+    echo "root-verify: $total files match the image"
+    exit 0
+fi
+echo "root-verify: $failed of $total files differ from the image (sha256sum: $status)" >&2
+printf '%s\n' "$out" | head -n 10 | sed 's/^/root-verify: /' >&2
+announce_bad
+exit 0
