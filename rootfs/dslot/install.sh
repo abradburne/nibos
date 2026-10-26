@@ -2,7 +2,8 @@
 # Put DSlot on the device as nibOS's boot UI: build the dslot package from $DSLOT_SRC (DSlot's
 # own repository, next to this one; its packaging/nibos/PKGBUILD) in the build machine, install
 # it, and add what nibOS provides around it: the user it runs as (a drop-in for its unit), the
-# polkit rule that lets that user power off, `nib boot-ui`, expedited RCU, and the TF2 card.
+# polkit rule that lets that user power off, `nib boot-ui`, expedited RCU, and the TF2 card
+# (mounted by a udev rule when it appears).
 #
 #   rootfs/dslot/install.sh [user@host]
 #
@@ -37,7 +38,7 @@ for f in user.conf 50-dslot-power.rules; do
     sed -e "s/@NIBOS_USER@/$NIBOS_USER/g" -e "s/@NIBOS_UID@/$NIBOS_UID/g" "$here/$f" > "$stage/$f"
 done
 scp -q "${ssh_opts[@]}" "$pkg" "$stage/user.conf" "$stage/50-dslot-power.rules" "$here/nib-boot-ui" \
-    "$here/nibos-rcu.conf" "$target:/tmp/"
+    "$here/nibos-rcu.conf" "$here/70-nibos-games-card.rules" "$target:/tmp/"
 ssh "${ssh_opts[@]}" "$target" "UID_=$NIBOS_UID PKG='${pkg##*/}' sh -s" <<'EOF2'
 set -e
 command -v nib >/dev/null || { echo "no nib command: install nibos-hw first"; exit 1; }
@@ -50,15 +51,24 @@ sudo install -Dm644 /tmp/50-dslot-power.rules /etc/polkit-1/rules.d/50-dslot-pow
 sudo install -Dm755 /tmp/nib-boot-ui /usr/lib/nibos/nib-boot-ui
 sudo install -Dm644 /tmp/nibos-rcu.conf /etc/tmpfiles.d/nibos-rcu.conf
 sudo systemd-tmpfiles --create /etc/tmpfiles.d/nibos-rcu.conf
-# The TF2 card: kernel exFAT, mounted on first use like the ROMS partition.
+# The TF2 card: kernel exFAT, mounted by udev when the card appears (not an automount, whose
+# device timeout every access would wait out with no card in). An automount entry from before
+# is replaced.
 [ ! -e /usr/bin/mount.exfat-fuse ] || sudo pacman -Rdd --noconfirm exfat-utils >/dev/null
 sudo pacman -S --noconfirm --needed exfatprogs >/dev/null
 sudo install -d /mnt/ds
-grep -q "^LABEL=DS " /etc/fstab ||
-    echo "LABEL=DS    /mnt/ds    exfat rw,noatime,nofail,x-systemd.automount,x-systemd.device-timeout=5,uid=$UID_,gid=$UID_,fmask=0022,dmask=0022  0 0" |
-    sudo tee -a /etc/fstab >/dev/null
-rm -f "/tmp/$PKG" /tmp/user.conf /tmp/50-dslot-power.rules /tmp/nib-boot-ui /tmp/nibos-rcu.conf
+sudo install -Dm644 /tmp/70-nibos-games-card.rules /etc/udev/rules.d/70-nibos-games-card.rules
+if ! grep -q "^LABEL=DS .*noauto,x-systemd.device-bound" /etc/fstab; then
+    sudo sed -i '/^LABEL=DS /d' /etc/fstab
+    echo "LABEL=DS    /mnt/ds    exfat rw,noatime,nofail,noauto,x-systemd.device-bound,uid=$UID_,gid=$UID_,fmask=0022,dmask=0022  0 0" |
+        sudo tee -a /etc/fstab >/dev/null
+    sudo systemctl stop mnt-ds.automount 2>/dev/null || true
+fi
+rm -f "/tmp/$PKG" /tmp/user.conf /tmp/50-dslot-power.rules /tmp/nib-boot-ui /tmp/nibos-rcu.conf /tmp/70-nibos-games-card.rules
 sudo systemctl daemon-reload
+sudo udevadm control --reload
+# A card already in the slot is mounted now.
+sudo udevadm trigger --subsystem-match=block --action=add
 ls /usr/share/dslot/emulators/*.toml >/dev/null 2>&1 || echo "no emulator descriptions in /usr/share/dslot/emulators yet: install an emulator to start games"
 nib boot-ui status
 EOF2

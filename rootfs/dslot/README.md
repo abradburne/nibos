@@ -11,7 +11,8 @@ does on nibOS. This directory is what nibOS adds around the package:
 | [`50-dslot-power.rules`](50-dslot-power.rules) | `/etc/polkit-1/rules.d/` | lets that user power off and restart from DSlot's menu, with no login session |
 | [`nib-boot-ui`](nib-boot-ui) | `/usr/lib/nibos/nib-boot-ui` | `nib boot-ui on|off|status`: DSlot or the shell at power-on |
 | [`nibos-rcu.conf`](nibos-rcu.conf) | `/etc/tmpfiles.d/` | expedited RCU grace periods: each `close()` of an input device waits for one, and SDL opens and closes all of them looking for controllers: ~0.3 s of every game's start and of the return to the shelf, ~0.1 s expedited |
-| (in `install.sh`) | `/etc/fstab` | the TF2 card (label `DS`) at `/mnt/ds` with the kernel's exFAT driver, an automount (`exfatprogs` replaces fuse-exfat's `exfat-utils`) |
+| (in `install.sh`) | `/etc/fstab` | the TF2 card (label `DS`) at `/mnt/ds` with the kernel's exFAT driver, `noauto` (`exfatprogs` replaces fuse-exfat's `exfat-utils`) |
+| `70-nibos-games-card.rules` | `/etc/udev/rules.d/` | mounts the TF2 card when it appears and lets systemd unmount it when it goes; an automount stalled every access by its device timeout with the slot empty |
 
 ```bash
 rootfs/dslot/install.sh                       # build the dslot package in rgbuild; install it and the files above

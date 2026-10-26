@@ -1,0 +1,5 @@
+# nibos: the games card in TF2 (exFAT, label DS) is mounted at /mnt/ds the moment it appears,
+# and unmounted when it is taken out. Its /etc/fstab entry is noauto; this starts the mount
+# unit systemd makes from it. (An automount made every touch of /mnt/ds wait its device
+# timeout out, 5 s, with no card in the slot: a launcher listing games took minutes.)
+ACTION=="add|change", SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="DS", TAG+="systemd", ENV{SYSTEMD_WANTS}+="mnt-ds.mount"

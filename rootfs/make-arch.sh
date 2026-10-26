@@ -157,9 +157,12 @@ if [ "$for_image" = 1 ]; then
     cat > "$root/etc/fstab" <<EOF
 PARTLABEL=nibos-state  /var/lib/nibos/state  ext4  rw,noatime  0 0
 LABEL=NIBOS-DATA  /mnt/roms  exfat  rw,noatime,nofail,x-systemd.automount,uid=$uid,gid=$uid,fmask=0022,dmask=0022  0 0
-LABEL=DS    /mnt/ds    exfat rw,noatime,nofail,x-systemd.automount,x-systemd.device-timeout=5,uid=$uid,gid=$uid,fmask=0022,dmask=0022  0 0
+LABEL=DS    /mnt/ds    exfat rw,noatime,nofail,noauto,x-systemd.device-bound,uid=$uid,gid=$uid,fmask=0022,dmask=0022  0 0
 EOF
     mkdir -p "$root/var/lib/nibos/state" "$root/mnt/ds"
+    # The TF2 card is mounted when udev sees it, not on first use: an automount would stall
+    # every access for its device timeout with no card in the slot.
+    install -Dm644 "$here/dslot/70-nibos-games-card.rules" "$root/etc/udev/rules.d/70-nibos-games-card.rules"
 else
     cat > "$root/etc/fstab" <<EOF
 LABEL=ROMS  /mnt/roms  vfat  rw,noatime,nofail,x-systemd.automount,uid=$uid,gid=$uid,fmask=0022,dmask=0022  0 0
