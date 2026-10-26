@@ -52,6 +52,12 @@ leaves nothing: try the fallback (1).
 A test that "hangs" over SSH may only have lost Wi-Fi: check the log or `journalctl -b -1`
 before assuming the worst.
 
+For a bug report, `nib bug-report` writes a copy of this start's log with the private parts
+taken out (Wi-Fi names and passphrases, MAC and IP addresses, the hostname) to
+`nibos/bug-report-DATE.txt` on the same partition; `nib bug-report send` also posts it to
+nibOS's bug tracker (`/etc/nibos/bug-report.conf`) and prints a code to quote. A tracker that
+is down costs a minute and a message; the file is on the card either way.
+
 ## 3. Back to the stock bootloader (development card, Mac)
 
 If the card doesn't boot even with A held, put it in a Mac and run:

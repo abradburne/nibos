@@ -1,0 +1,213 @@
+#!/bin/sh
+# nib bug-report: a scrubbed copy of this start's log, saved on the card and sent to nibOS's bug tracker
+#
+#   nib bug-report [--why TEXT]           make the report and save it on the card; prints its path
+#   nib bug-report send [--why TEXT]      the same, then send it (needs a DSN and the network);
+#                                         prints the report's code, to quote in a bug report
+#   nib bug-report send FILE              send a report made earlier
+#   nib bug-report scrub < LOG > OUT      the scrub alone, for a log from anywhere
+#
+# The report is this start's log as bootlog leaves it on the card (the kernel log and the
+# journal, with the emulator's and DSlot's lines in it), with the private parts taken out:
+# Wi-Fi network names and passphrases, MAC and IP addresses, the hostname and the user's name
+# when they aren't nibOS's own. Game file names stay: they are usually the point. It goes to
+# ROMS/nibos/bug-report-DATE.txt (an image's NIBOS-DATA), readable on a computer and small
+# enough to attach anywhere, so a report is useful with no network at all.
+#
+# `send` posts it to the tracker named in /etc/nibos/bug-report.conf (DSN=, a Sentry-style
+# DSN: GlitchTip or Sentry), as one event with the report attached. A DSN only lets a device
+# write; reading needs a login there. Without a DSN or a network the report is saved all the
+# same, and the message says what to do with it. `--why` gives the report its title (DSlot
+# passes what went wrong). The wheel group may run it; nothing here needs root.
+set -eu
+
+conf=/etc/nibos/bug-report.conf
+release=/usr/lib/nibos/release
+logdir=/mnt/roms/nibos/log
+outdir=/mnt/roms/nibos
+# The most lines of the log a report carries (the end of it, where the failure is).
+lines=3000
+
+# --- The scrub -------------------------------------------------------------------------------
+
+# Private parts out, the rest as it was. Patterns portable across GNU and BSD sed (-E, no \b,
+# no I flag). MACs before IPv6 (a MAC's hex pairs would otherwise look like one); a time of day
+# (11:25:16) has two colons and is left alone, an IPv6 address has at least two colons with a
+# hex letter or "::" in it, so only those forms are taken.
+scrub() {
+    # The hostname and user go only when they aren't nibOS's own (an image's are both "nibos").
+    host=$(cat /etc/hostname 2>/dev/null || hostname 2>/dev/null || echo nibos)
+    user=${SUDO_USER:-$(id -un 2>/dev/null || echo nibos)}
+    [ "$host" != nibos ] || host='[host]'
+    [ "$user" != nibos ] || user='[user]'
+    sed -E \
+        -e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/xx:xx:xx:xx:xx:xx/g' \
+        -e 's#(inet6 )[0-9A-Fa-f:]+(/[0-9]+)?#\1[ipv6]\2#g' \
+        -e 's/fe80:[0-9A-Fa-f:]*/[ipv6]/g' \
+        -e 's/([0-9A-Fa-f]{1,4}:){2,7}:?[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*(:[0-9A-Fa-f]{0,4})*/[ipv6]/g' \
+        -e 's#(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]+)?#\1[ip]#g' \
+        -e 's/((ssid|SSID|Ssid)[=: ]+)[^,;"]*/\1[ssid]/g' \
+        -e 's/((psk|PSK|passphrase|Passphrase|password|Password|PreSharedKey)[=: ]+)[^ ,;"]*/\1[hidden]/g' \
+        -e 's/(Connected to |Network )"[^"]*"/\1"[ssid]"/g' \
+        -e 's/(Hostname set to <)[^>]*>/\1[host]>/' \
+        -e "s/[[:space:]]$(printf %s "$host" | sed 's/[^A-Za-z0-9_-]/./g') / [host] /g" \
+        -e "s#/home/$(printf %s "$user" | sed 's/[^A-Za-z0-9_-]/./g')/#/home/[user]/#g"
+}
+
+# --- The report ------------------------------------------------------------------------------
+
+# This start's log, brought up to now by bootlog where it can be (it writes to the card and
+# reads the journal as the user), else the newest file on the card.
+current_log() {
+    f=$(cat /run/nibos/bootlog 2>/dev/null || true)
+    if [ -n "$f" ] && [ -x /usr/lib/nibos/bootlog ]; then
+        /usr/lib/nibos/bootlog now >/dev/null 2>&1 || true
+    fi
+    # shellcheck disable=SC2012 # the names are bootlog's own, boot-DATE.txt
+    [ -n "$f" ] && [ -r "$f" ] || f=$(ls -t "$logdir"/boot-*.txt 2>/dev/null | head -1 || true)
+    [ -n "$f" ] || { echo "nib bug-report: no boot log on the card ($logdir)" >&2; exit 1; }
+    echo "$f"
+}
+
+# What runs: the release file's NIBOS_* (an image), or what the system says (a dev card).
+identity() {
+    NIBOS_VERSION=dev NIBOS_BUILD=unknown NIBOS_BOARD=unknown NIBOS_EDITION=unknown NIBOS_CHANNEL=none
+    # shellcheck source=/dev/null
+    [ ! -r $release ] || . $release
+    [ "$NIBOS_BOARD" != unknown ] || { [ ! -r /usr/lib/nibos/board.conf ] || NIBOS_BOARD=$(sed -n 's/^NIBOS_BOARD=//p' /usr/lib/nibos/board.conf | head -1); }
+}
+
+make_report() {
+    why=$1
+    log=$(current_log)
+    identity
+    mkdir -p "$outdir"
+    out=$outdir/bug-report-$(date -u +%Y%m%d-%H%M%S).txt
+    {
+        echo "nibOS bug report: ${why:-no title}"
+        echo "made: $(date -u +%Y-%m-%dT%H:%M:%SZ)   version: $NIBOS_VERSION ($NIBOS_BUILD)   board: $NIBOS_BOARD   edition: $NIBOS_EDITION   channel: $NIBOS_CHANNEL"
+        echo "uptime: $(cut -d' ' -f1 /proc/uptime 2>/dev/null || echo ?) s   log: ${log##*/}, last $lines lines, private parts removed"
+        echo
+        tail -n "$lines" "$log" | scrub
+    } > "$out.new"
+    mv -f "$out.new" "$out"
+    sync
+    echo "$out"
+}
+
+# --- Sending ---------------------------------------------------------------------------------
+
+# A string as JSON text (quoted): backslash and quote escaped, tabs as \t, other control
+# characters dropped.
+json_str() {
+    printf '"%s"' "$(printf %s "$1" | tr -d '\000-\010\013-\037' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | awk 'NR>1{printf "\\n"} {printf "%s", $0}')"
+}
+
+# The network, if it is off and the system starts it on demand: up to 20 s for a route.
+want_network() {
+    ip route show default 2>/dev/null | grep -q . && return 0
+    [ ! -x /usr/lib/nibos/nib-net ] || /usr/lib/nibos/nib-net up >/dev/null 2>&1 || true
+    [ ! -x /usr/lib/nibos/nib-wifi ] || /usr/lib/nibos/nib-wifi on >/dev/null 2>&1 || true
+    n=0
+    while [ $n -lt 40 ]; do
+        ip route show default 2>/dev/null | grep -q . && return 0
+        sleep 0.5
+        n=$((n + 1))
+    done
+    return 1
+}
+
+send_report() {
+    file=$1
+    why=$2
+    dsn=
+    # shellcheck source=/dev/null
+    [ ! -r $conf ] || . $conf
+    dsn=${DSN:-$dsn}
+    if [ -z "$dsn" ]; then
+        echo "saved: $file"
+        echo "nib bug-report: no bug tracker set ($conf has no DSN): attach the saved file to your report" >&2
+        exit 3
+    fi
+    # DSN: scheme://KEY@HOST[:PORT]/[PATH/]PROJECT -> scheme://HOST[:PORT]/[PATH/]api/PROJECT/envelope/
+    scheme=${dsn%%://*}
+    rest=${dsn#*://}
+    key=${rest%%@*}
+    rest=${rest#*@}
+    hostport=${rest%%/*}
+    path=${rest#"$hostport"}
+    project=${path##*/}
+    prefix=${path%/*}
+    url="$scheme://$hostport$prefix/api/$project/envelope/"
+    identity
+    [ -z "$why" ] && why=$(sed -n '1s/^nibOS bug report: //p' "$file")
+    [ -n "$why" ] && [ "$why" != "no title" ] || why="bug report from the device"
+    id=$(uuidgen 2>/dev/null | tr -d - || od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    tail=$(tail -n 40 "$file")
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp" "$tmp.event"' EXIT
+    {
+        printf '{"event_id":%s,"timestamp":%s,"platform":"other","level":"error","logger":"nibos","release":%s,"environment":%s,"message":{"formatted":%s},"tags":{"board":%s,"edition":%s,"version":%s,"build":%s},"extra":{"log_tail":%s}}' \
+            "$(json_str "$id")" "$(json_str "$now")" "$(json_str "nibos@$NIBOS_VERSION+$NIBOS_BUILD")" "$(json_str "$NIBOS_CHANNEL")" \
+            "$(json_str "$why")" "$(json_str "$NIBOS_BOARD")" "$(json_str "$NIBOS_EDITION")" "$(json_str "$NIBOS_VERSION")" "$(json_str "$NIBOS_BUILD")" \
+            "$(json_str "$tail")"
+    } > "$tmp.event"
+    {
+        printf '{"event_id":%s,"sent_at":%s}\n' "$(json_str "$id")" "$(json_str "$now")"
+        printf '{"type":"event","length":%s,"content_type":"application/json"}\n' "$(wc -c < "$tmp.event" | tr -d ' ')"
+        cat "$tmp.event"
+        printf '\n{"type":"attachment","length":%s,"filename":%s,"content_type":"text/plain","attachment_type":"event.attachment"}\n' \
+            "$(wc -c < "$file" | tr -d ' ')" "$(json_str "${file##*/}")"
+        cat "$file"
+        printf '\n'
+    } > "$tmp"
+    if ! want_network; then
+        echo "saved: $file"
+        echo "nib bug-report: no network: turn Wi-Fi on and run 'nib bug-report send $file', or attach the saved file" >&2
+        exit 4
+    fi
+    # A tracker that is down or unreachable costs a minute at most, and the report is on the
+    # card either way.
+    code=$(curl -sS --connect-timeout 10 --max-time 45 --retry 1 -o "$tmp.out" -w '%{http_code}' \
+        -H "X-Sentry-Auth: Sentry sentry_version=7, sentry_client=nibos-bug-report/1, sentry_key=$key" \
+        -H 'Content-Type: application/x-sentry-envelope' \
+        --data-binary "@$tmp" "$url" 2>"$tmp.err") || code=000
+    case "$code" in
+    2*)
+        echo "saved: $file"
+        echo "sent: report code $(printf %s "$id" | cut -c1-8)"
+        echo "$id" > "$file.sent"
+        ;;
+    *)
+        echo "saved: $file"
+        echo "nib bug-report: sending failed (HTTP $code$( [ -s "$tmp.err" ] && printf ': %s' "$(head -c 200 "$tmp.err")")): attach the saved file to your report" >&2
+        exit 5
+        ;;
+    esac
+}
+
+# --- Command line ----------------------------------------------------------------------------
+
+cmd=report
+file=
+why=
+while [ $# -gt 0 ]; do
+    case "$1" in
+    send | scrub | report) cmd=$1 ;;
+    --why) why=${2:-}; shift ;;
+    -h | --help) sed -n '2,8p' "$0"; exit 0 ;;
+    -*) echo "nib bug-report: unknown option $1" >&2; exit 2 ;;
+    *) file=$1 ;;
+    esac
+    shift
+done
+case "$cmd" in
+scrub) scrub ;;
+report) make_report "$why" ;;
+send)
+    [ -n "$file" ] || file=$(make_report "$why")
+    [ -r "$file" ] || { echo "nib bug-report: cannot read $file" >&2; exit 2; }
+    send_report "$file" "$why"
+    ;;
+esac

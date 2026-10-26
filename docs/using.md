@@ -143,6 +143,10 @@ rollback` goes back by hand. Games, saves and settings stay. How it works:
 
 ## What to do if…
 
+- **Something went wrong and you want to report it.** `nib bug-report send` saves a scrubbed
+  copy of this start's log on the card (`nibos/bug-report-DATE.txt`) and, when the image names a
+  bug tracker, sends it and prints a code to quote. Without a network it is saved all the same:
+  attach the file. [recovery.md](recovery.md), "Read the logs on the card".
 - **It won't start**: hold **A** while powering on; that boots the fallback whatever is wrong
   with the normal path. The boot logs are on the card. [recovery.md](recovery.md).
 - **"DSlot stopped working" appears**: DSlot crashed several times in a row and the safe mode

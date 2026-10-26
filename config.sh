@@ -59,6 +59,11 @@ case "$SSH_KEY" in *.pub) SSH_KEY=${SSH_KEY%.pub} ;; esac
 # are built in (docs/building.md). It sees the Mac's files at the same paths.
 : "${BUILD_MACHINE:=rgbuild}"
 
+# Where `nib bug-report send` posts a device's scrubbed log: a Sentry-style DSN,
+# nibOS's GlitchTip project's. The key only lets a device write; reading needs
+# a login there. Empty: reports are saved on the card and not sent.
+: "${NIBOS_BUGREPORT_DSN:=https://665ec3694a9b480fa7b943eb9098e808@tracker.alanb.dev/1}"
+
 # --- Sources ----------------------------------------------------------------
 
 # Paths inside the build machine ($HOME is its home there): scripts that run on
@@ -101,12 +106,12 @@ case "$SSH_KEY" in *.pub) SSH_KEY=${SSH_KEY%.pub} ;; esac
 # nibkit, the SDK library nibOS's programs and the emulators build on: its repository and the
 # tag they use (tools/make-image.sh fetches it for the packages built from other repositories).
 : "${NIBKIT_REPO:=https://github.com/abradburne/nibkit}"
-: "${NIBKIT_TAG:=v0.1.0}"
+: "${NIBKIT_TAG:=v0.1.1}"
 
 # System updates (docs/design/updates.md): the repository whose GitHub releases images update
 # from, and the channel they follow (stable, or beta for pre-releases too).
 : "${NIBOS_UPDATE_REPO:=abradburne/nibos}"
 : "${NIBOS_UPDATE_CHANNEL:=stable}"
 
-export NIBOS_UPDATE_REPO NIBOS_UPDATE_CHANNEL NIBKIT_REPO NIBKIT_TAG NIBOS_BOARD NIBOS_USER NIBOS_UID NIBOS_HOSTNAME NIBOS_TIMEZONE DEVICE SSH_KEY SSH_PUBKEY ROMS_VOLUME \
+export NIBOS_BUGREPORT_DSN NIBOS_UPDATE_REPO NIBOS_UPDATE_CHANNEL NIBKIT_REPO NIBKIT_TAG NIBOS_BOARD NIBOS_USER NIBOS_UID NIBOS_HOSTNAME NIBOS_TIMEZONE DEVICE SSH_KEY SSH_PUBKEY ROMS_VOLUME \
     BUILD_MACHINE KSRC KERNEL_COMMIT USRC UBOOT_TAG RKBIN RKBIN_COMMIT DSLOT_SRC STOCK_IMAGE STOCK_DIR

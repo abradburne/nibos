@@ -38,6 +38,7 @@ check_shell() {
     local files=() f
     while read -r f; do files+=("$f"); done < <(shell_files)
     shellcheck -x "${files[@]}"
+    hw/tests/test-bug-report.sh >/dev/null && echo "shell: nib bug-report's scrub passes"
     echo "shell: ${#files[@]} scripts clean"
 }
 

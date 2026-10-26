@@ -5,6 +5,7 @@
 #   nib net up|down|status|mode boot|deferred|demand    the network (nibos-hw)
 #   nib wifi on|off|status                              the Wi-Fi radio alone (nibos-hw)
 #   nib boot-ui on|off|status                           DSlot at power-on (rootfs/dslot)
+#   nib bug-report [send]                               a scrubbed log, saved and sent (nibos-hw)
 #   nib help                                            the commands installed here
 set -eu
 lib=/usr/lib/nibos

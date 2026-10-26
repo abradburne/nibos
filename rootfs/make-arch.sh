@@ -168,6 +168,10 @@ else
 LABEL=ROMS  /mnt/roms  vfat  rw,noatime,nofail,x-systemd.automount,uid=$uid,gid=$uid,fmask=0022,dmask=0022  0 0
 EOF
 fi
+# Where `nib bug-report send` posts a scrubbed log (config.sh's NIBOS_BUGREPORT_DSN; empty:
+# saved on the card only). Edit on the device to point a dev card elsewhere.
+install -d "$root/etc/nibos"
+printf '# nib bug-report: the bug tracker a report is sent to (a Sentry-style DSN). Empty: saved on the card only.\nDSN=%s\n' "$NIBOS_BUGREPORT_DSN" > "$root/etc/nibos/bug-report.conf"
 # nibOS's own units and scripts (files/): growing the root file system on the
 # first boot, the Wi-Fi import, the boot logs on ROMS, polkit for wheel, mDNS;
 # then the board's (boards/<board>/rootfs/files/).
