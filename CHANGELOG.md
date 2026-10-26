@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha2
 
 - **A card that wasn't written right says so.** Once per write of the card, about a minute
   after the first start and at idle priority, `nibos-root-verify` checks every file the image
@@ -9,8 +9,11 @@
   correctly" on the shelf, and `nib update` refuses to update over it
   ([recovery.md](docs/recovery.md#a-card-that-wasnt-written-right)). The usual cause is an
   imaging tool writing a `.img.xz` wrongly: one emulator quits at once while another runs.
+- **A crash says where it died.** DSperate (DS and GBA) writes one line from its crash handler,
+  `dsperate: crashed (SIGBUS) after "displays open", loading X.nds`, names the ROM it was given
+  in its first log lines, and its "cannot start" notice is no longer dismissed by a button still
+  held from the launch; DSlot's notice quotes that line.
 
-## 0.1.0-alpha2
 
 - **Starting without a card in TF2 no longer takes minutes.** `/mnt/ds` was an automount
   whose 5 s device timeout every touch waited out, again and again, with the slot empty; the
