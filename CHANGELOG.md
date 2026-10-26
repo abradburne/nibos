@@ -1,6 +1,21 @@
 # Changelog
 
-## 0.1.0-alpha1 (unreleased)
+## 0.1.0-alpha2
+
+- **Starting without a card in TF2 no longer takes minutes.** `/mnt/ds` was an automount
+  whose 5 s device timeout every touch waited out, again and again, with the slot empty; the
+  card is now mounted by udev the moment it appears and unmounted when it goes
+  (`70-nibos-games-card.rules`), and nibkit 0.1.1 leaves its folders out with no card in.
+  Measured: the shelf up 0.6 s after DSlot starts with TF2 out; a hot-plugged card mounted in
+  0.25 s.
+- **`nib bug-report`**: a copy of this start's log with the private parts taken out (Wi-Fi
+  names and passphrases, MAC and IP addresses, the hostname), saved as
+  `nibos/bug-report-DATE.txt` on the data partition; `nib bug-report send` also posts it to
+  nibOS's bug tracker and prints a code to quote. DSlot 0.3.1 offers it from the notice it
+  now shows when a game stops at once ([recovery.md](docs/recovery.md)).
+- DSlot 0.3.1: a game that comes straight back says why, on the shelf and in the log.
+
+## 0.1.0-alpha1
 
 The first public release: nibOS on the Anbernic RG DS+ (RK3568), mainline Linux and U-Boot,
 Arch Linux ARM, the `nibos-hw` hardware layer, and DSlot as the boot UI.
