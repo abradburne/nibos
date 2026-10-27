@@ -10,6 +10,7 @@ README that is its own reference.
 | [architecture.md](architecture.md) | The layers; generic, SoC and board; the boot chain; the SD card; what is where on the device |
 | [install.md](install.md) | From a stock card to nibOS alone or the whole package (DSlot, the emulators), each step checked; back to stock |
 | [building.md](building.md) | From an empty Mac to a booting device, in order |
+| [releasing.md](releasing.md) | How a release is made, in order: the trees and the tag, `tools/release-build.sh`, signing, publishing, the OTA check, the site |
 | [using.md](using.md) | Wi-Fi, logging in, controls and power, the boot UI, the network modes |
 | [recovery.md](recovery.md) | When the device doesn't start, from the A-held fallback to a whole card from a backup |
 | [boot-time.md](boot-time.md) | How it boots fast: each phase, what made it fast, what didn't pay, what's left |
