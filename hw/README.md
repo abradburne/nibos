@@ -82,7 +82,7 @@ down, so it can't tell a tap from a hold; the board's logind drop-in tells it to
 **Asleep too long on battery, it powers off.** Deep sleep still draws ~49 mA on the RG DS+
 (s2idle 123 mA; a full battery is gone in 3.6 days), and this kernel has nothing deeper with
 the memory kept. So `system-sleep/nibos-sleep-off` sets an RTC alarm `nib sleep off-after`
-minutes ahead (default 10; `never` turns it off; `/var/lib/nibos/state/sleep-off-after`, kept
+minutes ahead (default 60; `never` turns it off; `/var/lib/nibos/state/sleep-off-after`, kept
 across updates) when the device sleeps on battery, and if that alarm is what woke it and the
 charger is still out, powers off cleanly (DSlot and the emulators save the game's resume state at
 shutdown). On the charger it sleeps on. [docs/design/deep-sleep.md](../docs/design/deep-sleep.md).

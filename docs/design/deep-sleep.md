@@ -2,7 +2,7 @@
 
 Whether the RG DS+ can drop from its normal sleep into something deeper once it has been asleep
 for a while, what each state costs, and what nibOS does about it: `nib sleep off-after`
-(default 10 minutes), a sleep hook and an RTC alarm. Measured 2026-10-27 on nibOS 0.1.0-alpha4
+(default 60 minutes), a sleep hook and an RTC alarm. Measured 2026-10-27 on nibOS 0.1.0-alpha4
 (kernel 7.3-rc7), the dev card, DSlot on the shelf with no game, Wi-Fi up, charger out, 53% to
 49% over the runs.
 
@@ -60,18 +60,19 @@ auto-resume state and quits (the same path as the power menu's Sleep/Power off, 
 so after the boot the game is one Resume away. This is what the user asked for in effect: after
 N minutes asleep, stop paying 49 mA.
 
-The arithmetic for the default of 10 minutes: ten minutes asleep costs about 8 mAh (0.2% of the
-battery), the wake-and-shutdown about 0.5 mAh, and the next boot a few mAh. Powering off pays
-off only when the device would otherwise have slept for hours, and it costs the user a ~6 s boot
-and the game's reload instead of a ~2 s lid-open. 10 minutes is the default the user asked
-for; something longer (30-60 minutes) would annoy less and save nearly as much, and it is one
-setting away.
+The arithmetic for the default: ten minutes asleep costs about 8 mAh (0.2% of the battery), an
+hour about 49 mAh (1.2%), the wake-and-shutdown about 0.5 mAh, and the next boot a few mAh.
+Powering off pays off only when the device would otherwise have slept for hours, and it costs
+the user a ~6 s boot and the game's reload instead of a ~2 s lid-open. The user first asked for
+10 minutes and then chose **60**: a lid closed for a meal still opens on the game, and a device
+forgotten overnight loses one hour's 49 mAh instead of a third of its battery. It is one setting
+away either way.
 
 ## The mechanism
 
 - **The setting:** `nib sleep` shows it, `sudo nib sleep off-after MINUTES|never` sets it
   (1-1440). It is `/var/lib/nibos/state/sleep-off-after` on the state partition, so an update
-  keeps it; absent means **10 minutes**. The wheel group may set it with sudo (sudoers
+  keeps it; absent means **60 minutes**. The wheel group may set it with sudo (sudoers
   `nibos-sleep`), for DSlot's System page later.
 - **The hook:** `system-sleep/nibos-sleep-off`. Before sleep, on battery and with the setting
   not `never`, it sets the RTC's `wakealarm` that far ahead and records the time in

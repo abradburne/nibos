@@ -1,5 +1,5 @@
 #!/bin/sh
-# nibos-hw: asleep on battery longer than `nib sleep off-after` (default 10 minutes), the device
+# nibos-hw: asleep on battery longer than `nib sleep off-after` (default 60 minutes), the device
 # powers itself off: deep sleep still draws ~50 mA on the RG DS+ (docs/design/deep-sleep.md).
 #
 # pre:  on battery, with the setting not `never`, set the RTC's wake alarm that far ahead (an
@@ -25,7 +25,7 @@ case "$1" in
 pre)
     rm -f "$record"
     on_charger && exit 0
-    minutes=$(cat "$state/sleep-off-after" 2>/dev/null || echo 10)
+    minutes=$(cat "$state/sleep-off-after" 2>/dev/null || echo 60)
     case "$minutes" in never | '' | *[!0-9]*) exit 0 ;; esac
     now=$(cat $rtc/since_epoch)
     alarm=$((now + minutes * 60))

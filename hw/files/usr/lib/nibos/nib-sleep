@@ -11,12 +11,12 @@
 # off cleanly; at shutdown DSlot and the emulators save their resume state as they do for the
 # power menu, so the game is a Resume away after the boot (~6 s to the shelf). On the charger
 # it sleeps on, however long. The setting is /var/lib/nibos/state/sleep-off-after (minutes, or
-# `never`), on the state partition so an update keeps it; unset means 10 minutes. The wheel
+# `never`), on the state partition so an update keeps it; unset means 60 minutes. The wheel
 # group may set it with sudo (nibos-sleep sudoers). docs/design/deep-sleep.md.
 set -eu
 state=${NIBOS_STATE:-/var/lib/nibos/state}
 file=$state/sleep-off-after
-default=10
+default=60
 
 case "${1:-status}" in
 status)
