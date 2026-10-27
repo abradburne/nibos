@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha3
 
 - **A bug report carries the kernel's first lines too.** The report `nib bug-report` makes (and
   DSlot's Y: send a bug report) adds the first 150 lines of the boot log to the last 3000: the
@@ -21,6 +21,10 @@
   is written after each. DSlot's System page has it as **Date and time**
   ([using.md](docs/using.md#date-and-time)). Until now a DSlot card showed UTC, and the time
   was hours out until Wi-Fi came up.
+- DSlot 0.3.2: **System info** and **Date and time** on the System page, **Network info** on
+  the Wi-Fi page ([DSlot's changelog](https://github.com/abradburne/DSlot/blob/main/CHANGELOG.md)).
+- `nib update` refuses to update a card whose root check failed, as 0.1.0-alpha2's notes said
+  it would: that build's `nibos-hw` was made before the check went in.
 
 ## 0.1.0-alpha2
 
