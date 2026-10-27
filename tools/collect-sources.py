@@ -3,7 +3,7 @@
 every image's NOTICE makes (docs/design/images.md): runs in the build machine, as the
 building user (reading an image's package database uses sudo).
 
-    tools/collect-sources.py OUT WORK...
+    tools/collect-sources.py OUT WORK... [--cache DIR]
 
 WORK: tools/make-image.sh's work directories (root.img, docs/release), one per edition. For
 each package in their roots whose licence asks for source (GPL, LGPL, MPL and the like):
@@ -20,6 +20,11 @@ each package in their roots whose licence asks for source (GPL, LGPL, MPL and th
 Writes OUT/files/ (one archive a source), OUT/manifest.tsv (each image package with the
 archive its source is in, and the archives' SHA-256) and OUT/failed.txt (anything not
 collected). tools/pack-sources.py packs OUT into release assets.
+The archives are kept in a cache shared by every release (--cache DIR; default: sources-cache
+beside OUT), with the downloads behind them and the PKGBUILDs checkout: a release's run only
+collects what its images have that no earlier release did (an archive is named by its package
+and version, or by the commit built), and OUT/files/ holds hard links to this release's share
+of the cache. Most of a release's 150-odd archives are the same from one release to the next.
 """
 
 import argparse
@@ -287,6 +292,12 @@ def collect_tree(tree, files, srcdest, name, env=None):
 
 def git_archive(repo, commit, name, files):
     """A tree at a commit as NAME-COMMIT.tar.zst."""
+    # A commit the image names that the cache already has is taken from there, so a checkout
+    # that has moved on (rebased, or another clone) since an earlier release still serves.
+    if re.fullmatch(r"[0-9a-f]{12,40}", commit):
+        cached = os.path.join(files, f"{name}-{commit[:12]}.tar.zst")
+        if os.path.exists(cached):
+            return cached
     short = out_of(["git", "-C", repo, "rev-parse", "--short=12", commit]).strip()
     path = os.path.join(files, f"{name}-{short}.tar.zst")
     if not os.path.exists(path):
@@ -304,11 +315,15 @@ def main():
     p.add_argument("out")
     p.add_argument("work", nargs="+")
     p.add_argument("--only", help="comma-separated pkgbases (for a retry)")
+    p.add_argument("--cache", help="the archive cache shared by releases (default: sources-cache beside OUT)")
     a = p.parse_args()
-    files = os.path.join(a.out, "files")
-    srcdest = os.path.join(a.out, "srcdest")
+    cache = a.cache or os.path.join(os.path.dirname(os.path.abspath(a.out)), "sources-cache")
+    files = os.path.join(cache, "files")
+    srcdest = os.path.join(cache, "srcdest")
+    out_files = os.path.join(a.out, "files")
     os.makedirs(files, exist_ok=True)
     os.makedirs(srcdest, exist_ok=True)
+    os.makedirs(out_files, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="nibos-sources-")
 
     rows = {}
@@ -344,7 +359,7 @@ def main():
     failed = []
     # Where each archive came from, kept across runs into the same OUT (a resumed run skips the
     # archives it has, and still names their origin in the manifest).
-    origins_file = os.path.join(a.out, "sources-from.tsv")
+    origins_file = os.path.join(cache, "sources-from.tsv")
     origins = {}
     if os.path.exists(origins_file):
         for line in open(origins_file):
@@ -358,9 +373,11 @@ def main():
         return path, how
 
     # Arch Linux ARM's packages, by pkgbase.
-    alarm = os.path.join(a.out, "PKGBUILDs")
+    alarm = os.path.join(cache, "PKGBUILDs")
     if not os.path.isdir(alarm):
         run(["git", "clone", "-q", ALARM_REPO, alarm])
+    else:  # brought up to date for the versions a newer image has
+        subprocess.run(["git", "-C", alarm, "pull", "-q", "--ff-only"], check=False)
     bases = {}
     for n, r in oblig.items():
         if n not in own:
@@ -372,7 +389,7 @@ def main():
         done = os.path.join(files, f"{base}-{version.replace(':', '-')}.src.tar.zst")
         tree = os.path.join(tmp, "trees", f"{base}-{version}")
         os.makedirs(tree, exist_ok=True)
-        if os.path.exists(done):  # from an earlier run into the same OUT
+        if os.path.exists(done):  # from an earlier run, this release's or another's
             how = origins.get(os.path.basename(done))
             if not how:  # an earlier run that didn't record it: find the tree again to say
                 how = alarm_tree(alarm, base, version, tree) or arch_tree(base, version, tree)
@@ -507,6 +524,21 @@ def main():
                            "portmaster-get and DSlot"]) + "\n")
     with open(os.path.join(a.out, "failed.txt"), "w") as f:
         f.write("\n".join(failed) + ("\n" if failed else ""))
+    # This release's share of the cache, as hard links, and nothing else in OUT/files.
+    wanted = {os.path.basename(path) for path, _ in archive_of.values()}
+    wanted |= {os.path.basename(path) for _, _, path, _, _ in extra}
+    wanted.add(os.path.basename(rust))
+    for n in os.listdir(out_files):
+        if n not in wanted:
+            os.remove(os.path.join(out_files, n))
+    for n in wanted:
+        dst = os.path.join(out_files, n)
+        if os.path.exists(dst):
+            os.remove(dst)
+        try:
+            os.link(os.path.join(files, n), dst)
+        except OSError:
+            shutil.copy(os.path.join(files, n), dst)
     print(f"collected: {len(set(p for p, _ in archive_of.values()))} archives; "
           f"failed: {len(failed)} (failed.txt)")
     shutil.rmtree(tmp, ignore_errors=True)
