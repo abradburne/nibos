@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **A DSlot started by hand gets past the safe mode.** Once the safe mode is up it forgets
+  DSlot's failures, and a start of `dslot.service` (its menu, `nib boot-ui`, `systemctl start`)
+  stops the safe mode first. Until now the start was refused as repeated too quickly, or DSlot
+  died at once because the safe mode held the display, and the safe mode came straight back:
+  what three quick restarts of a test build did on 27 October. And the safe mode now comes up
+  after a crash at all: the package unit's own `OnFailure=getty@tty1` was named beside it and
+  won, so a DSlot that kept crashing left a login prompt on the top screen instead.
 - **The clock can be seen and set.** `nib clock` shows the time, the zone and whether the time
   came from the network; `nib clock sync` brings Wi-Fi up and waits for the time servers,
   `nib clock zone` sets the zone and keeps it on the state partition so an update doesn't lose

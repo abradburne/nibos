@@ -191,6 +191,12 @@ fn main() {
         return;
     }
     let why = what_failed();
+    // DSlot's failures forgotten now that the safe mode has them: a `systemctl start dslot`
+    // from here on (an install, nib boot-ui, this menu) is accepted rather than refused as
+    // "repeated too quickly", and its start stops the safe mode (dslot.service.d's
+    // ExecStartPre=). Not before this point: while DSlot is being restarted, forgetting would
+    // let it fail forever.
+    systemctl(&["reset-failed", UI]);
     let unconfirmed = Command::new("nibos-bootctl")
         .arg("unconfirmed")
         .status()

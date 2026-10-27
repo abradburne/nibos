@@ -277,6 +277,11 @@ if [ "$for_image" = 1 ]; then
         install -Dm755 "${SAFE_MODE:?SAFE_MODE, rootfs/safe-mode}/target/release/nibos-safe-mode" "$root/usr/lib/nibos/safe-mode"
         install -Dm644 "$SAFE_MODE/nibos-safe-mode.service" "$root/usr/lib/systemd/system/nibos-safe-mode.service"
         install -Dm644 "$SAFE_MODE/nibos-recovery.conf" "$root/usr/lib/systemd/system/dslot.service.d/nibos-recovery.conf"
+        # The package's own OnFailure=getty@tty1 goes (a drop-in can't take a dependency away):
+        # named beside the safe mode in one OnFailure=, the two conflict and systemd started the
+        # console and dropped the safe mode after a crash. The safe mode's own "Open a console"
+        # still gives it, and so does a clean exit (OnSuccess=).
+        sed -i '/^OnFailure=getty@tty1.service$/d' "$root/usr/lib/systemd/system/dslot.service"
         chroot "$root" systemctl enable dslot.service >/dev/null
         chroot "$root" systemctl disable getty@tty1.service >/dev/null 2>&1 || true
     fi

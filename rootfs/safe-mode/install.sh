@@ -20,6 +20,9 @@ set -e
 sudo install -D -m 755 /tmp/nibos-safe-mode /usr/lib/nibos/safe-mode
 sudo install -D -m 644 /tmp/nibos-safe-mode.service /usr/lib/systemd/system/nibos-safe-mode.service
 sudo install -D -m 644 /tmp/nibos-recovery.conf /usr/lib/systemd/system/dslot.service.d/nibos-recovery.conf
+# As make-arch.sh does: the package's OnFailure=getty@tty1 out, or a crash starts the console
+# and the safe mode's start is dropped as conflicting.
+sudo sed -i '/^OnFailure=getty@tty1.service$/d' /usr/lib/systemd/system/dslot.service
 rm /tmp/nibos-safe-mode /tmp/nibos-safe-mode.service /tmp/nibos-recovery.conf
 sudo systemctl daemon-reload
 systemctl show dslot.service -p Restart -p OnFailure -p StartLimitBurst
