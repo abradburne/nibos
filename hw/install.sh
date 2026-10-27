@@ -28,11 +28,11 @@ done
 chmod 755 "$dest/usr/bin/nib" "$dest/usr/lib/nibos/nib-net" "$dest/usr/lib/nibos/nib-brightness" \
     "$dest/usr/lib/nibos/nib-lid" "$dest/usr/lib/nibos/nib-battery" "$dest/usr/lib/nibos/nib-wifi" "$dest/usr/lib/nibos/nib-audio" \
     "$dest/usr/lib/nibos/nib-bluetooth" "$dest/usr/lib/nibos/radios-restore" "$dest/usr/lib/nibos/nib-update" \
-    "$dest/usr/lib/nibos/nib-bug-report" \
+    "$dest/usr/lib/nibos/nib-bug-report" "$dest/usr/lib/nibos/nib-clock" \
     "$dest/usr/lib/systemd/system-sleep/nibos-unbind" "$dest/usr/lib/systemd/system-sleep/nibos-resumed" \
     "$dest/usr/lib/systemd/system-sleep/nibos-wifi-wake" "$dest/usr/lib/nibos/wifi-after-wake"
 # sudo ignores a rule file anyone but root may write.
-chmod 440 "$dest/etc/sudoers.d/nibos-audio"
+chmod 440 "$dest/etc/sudoers.d/nibos-audio" "$dest/etc/sudoers.d/nibos-clock"
 install -Dm755 "$bin/nibos-input" "$dest/usr/bin/nibos-input"
 install -Dm755 "$bin/nibos-audio" "$dest/usr/bin/nibos-audio"
 install -Dm755 "$bin/nibos-backlight" "$dest/usr/bin/nibos-backlight"

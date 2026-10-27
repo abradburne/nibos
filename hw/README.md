@@ -203,8 +203,10 @@ and `nibos-zram` sets up compressed swap as large as RAM, also after start-up (a
 member it held up `local-fs.target`).
 
 **`nib`.** `/usr/bin/nib` runs `/usr/lib/nibos/nib-<command>`: this package brings `nib net`,
-`nib wifi`, `nib bluetooth`, `nib brightness`, `nib lid`, `nib battery` and `nib audio`, the
-boot UI brings `nib boot-ui`, and `nib help` lists what is installed.
+`nib wifi`, `nib bluetooth`, `nib brightness`, `nib lid`, `nib battery`, `nib audio`,
+`nib update`, `nib bug-report` and `nib clock` (the time, zone and network time, for DSlot's
+Clock page: `sudoers.d/nibos-clock` lets wheel run it), the boot UI brings `nib boot-ui`, and
+`nib help` lists what is installed.
 
 **Firmware.** The package builds the board's own tuning files (`boards/<board>/hw/*-tuning.py`:
 the RG DS+'s AW88166 speaker amps, with the DSP bypassed and conservative gain) into

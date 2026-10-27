@@ -74,7 +74,7 @@ fn only(t: &toml::Table, what: &str, allowed: &[&str]) -> Result<(), Refusal> {
 }
 
 /// A time zone name: a path under /usr/share/zoneinfo, with no way out of it.
-fn valid_timezone(z: &str) -> bool {
+pub fn valid_timezone(z: &str) -> bool {
     !z.is_empty()
         && z.len() <= 64
         && !z.starts_with('/')

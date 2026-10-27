@@ -1,0 +1,3 @@
+# nibos-hw: the wheel group may set the clock, its zone and network time (nib clock) without a
+# password, so a settings screen (DSlot's Clock page) can offer it.
+%wheel ALL=(root) NOPASSWD: /usr/lib/nibos/nib-clock

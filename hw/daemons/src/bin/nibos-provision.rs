@@ -27,6 +27,8 @@ const BOOT_MOUNT: &str = "/run/nibos/boot";
 const STATE: &str = "/var/lib/nibos/state";
 /// The image's one user (uid 1000).
 const USER: &str = "nibos";
+const ZONEINFO: &str = "/usr/share/zoneinfo";
+const LOCALTIME: &str = "/etc/localtime";
 
 fn run(cmd: &str, args: &[&str], input: Option<&str>) -> io::Result<()> {
     let mut child = Command::new(cmd)
@@ -69,12 +71,45 @@ fn wipe(path: &Path) -> io::Result<()> {
     fs::remove_file(path)
 }
 
+/// Points /etc/localtime at the zone named, if there is one; whether it did.
+fn set_timezone(z: &str) -> io::Result<bool> {
+    let zone = Path::new(ZONEINFO).join(z);
+    if !zone.is_file() {
+        return Ok(false);
+    }
+    let _ = fs::remove_file(LOCALTIME);
+    symlink(&zone, LOCALTIME)?;
+    Ok(true)
+}
+
+/// The zone kept on the state partition (`timezone`, one line: provision.toml's, or what `nib
+/// clock zone` set) back on /etc/localtime, which a system update replaces with the image's.
+fn restore_timezone(state: &Path) -> io::Result<()> {
+    let Ok(text) = fs::read_to_string(state.join("timezone")) else {
+        return Ok(());
+    };
+    let z = text.trim();
+    if !provision::valid_timezone(z) {
+        eprintln!("nibos-provision: state/timezone isn't a time zone name; ignored");
+        return Ok(());
+    }
+    let now = fs::read_link(LOCALTIME).ok();
+    if now.as_deref() == Some(Path::new(ZONEINFO).join(z).as_path()) {
+        return Ok(());
+    }
+    if set_timezone(z)? {
+        eprintln!("nibos-provision: time zone {z} (from the state partition)");
+    } else {
+        eprintln!("nibos-provision: no time zone {z} on this system; kept the image's");
+    }
+    Ok(())
+}
+
 fn apply(p: &Provision, state: &Path) -> io::Result<()> {
     if let Some(z) = &p.timezone {
-        let zone = Path::new("/usr/share/zoneinfo").join(z);
-        if zone.is_file() {
-            let _ = fs::remove_file("/etc/localtime");
-            symlink(&zone, "/etc/localtime")?;
+        if set_timezone(z)? {
+            // Kept with the other provisioned settings, where `nib clock zone` keeps its too.
+            write_file(&state.join("timezone"), &format!("{z}\n"), 0o644)?;
         } else {
             eprintln!("nibos-provision: no time zone {z}; kept the old one");
         }
@@ -236,7 +271,9 @@ fn main() {
         eprintln!("nibos-provision: no {BOOT_PART}; nothing to read");
         Ok(())
     };
-    let result = result.and_then(|()| access(&state));
+    let result = result
+        .and_then(|()| restore_timezone(&state))
+        .and_then(|()| access(&state));
     if let Err(e) = result {
         eprintln!("nibos-provision: {e}");
         exit(1);

@@ -1,0 +1,191 @@
+#!/bin/sh
+# nib clock: the date, time and time zone: shown, set from the network, or set by hand
+#
+#   nib clock [status]                 the time, the zone and where the time came from (key=value lines)
+#   nib clock sync                     bring the network up and set the clock from the time servers
+#   nib clock zones                    the time zones to choose from (Region/City, one a line)
+#   nib clock zone ZONE                set the time zone (Asia/Tokyo); kept across updates
+#   nib clock set 'YYYY-MM-DD HH:MM'   set the time by hand: network time goes off until `ntp on`
+#   nib clock ntp on|off               network time (systemd-timesyncd) on or off
+#
+# The clock is systemd's: systemd-timesyncd sets it from the network (NTP) whenever the network
+# is up, which on a device that brings Wi-Fi up on demand may be long after power-on, and
+# timedatectl sets the zone and the time. This command puts the pieces a player needs together,
+# for DSlot's Clock page (System > Date and time) and the shell: `status` is plain key=value
+# lines; `sync` first brings the network up as `nib bug-report send` does and waits for the
+# time servers to answer (20 s for a route, 30 s for a reply); `zone` writes the zone to the
+# state partition too, so it outlives a system update (nibos-provision puts it back at boot;
+# a zone in provision.toml wins). After a set or a sync the hardware clock is written where
+# the board has one (/dev/rtc0), so the time survives a power-off. `status` and `zones` need no
+# root; the rest does, and the wheel group may run this file with sudo (nibos-clock sudoers).
+#
+# Exit codes: 1 something failed, 2 usage, 4 no network (sync), 5 the time servers didn't
+# answer in time (a pool server or two often time out first, 10 s each).
+set -eu
+
+state=${NIBOS_STATE:-/var/lib/nibos/state}
+zoneinfo=/usr/share/zoneinfo
+
+need_root() { [ "$(id -u)" = 0 ] || { echo "nib clock: $1 needs root (sudo nib clock $1)" >&2; exit 1; }; }
+
+# What timedated says: NTP=yes|no, NTPSynchronized=yes|no, Timezone=...
+tdc() { timedatectl show -p "$1" --value 2>/dev/null || true; }
+
+# When the time servers last answered this run, as timesyncd keeps it (the reply's arrival,
+# in UTC), as 'YYYY-MM-DD HH:MM:SS' local; nothing before the first reply, and nothing while
+# it is ahead of the clock (the reply that stepped the clock back is stamped in the old time).
+last_reply() {
+    msg=$(timedatectl show-timesync -p NTPMessage --value 2>/dev/null || true)
+    ts=$(printf %s "$msg" | sed -n 's/.*DestinationTimestamp=[A-Za-z]* \([0-9-]* [0-9:]* [A-Z]*\).*/\1/p')
+    [ -n "$ts" ] || return 0
+    at=$(date -d "$ts" +%s 2>/dev/null) || return 0
+    [ "$at" -le "$(date +%s)" ] || return 0
+    date -d "@$at" '+%Y-%m-%d %H:%M:%S'
+}
+
+status() {
+    date '+local=%Y-%m-%d %H:%M:%S%nweekday=%A%nmonth=%B%noffset=%z'
+    # One call to timedated for the three: Timezone=, NTP=, NTPSynchronized=, as zone=, ntp=,
+    # synced=. Without timedated (a container), the zone from the link and nothing else.
+    td=$(timedatectl show -p Timezone -p NTP -p NTPSynchronized 2>/dev/null || true)
+    if [ -n "$td" ]; then
+        printf '%s\n' "$td" | sed -e 's/^Timezone=/zone=/' -e 's/^NTPSynchronized=/synced=/' -e 's/^NTP=/ntp=/'
+    else
+        echo "zone=$(readlink /etc/localtime 2>/dev/null | sed 's#.*/zoneinfo/##')"
+        echo ntp=unknown
+        echo synced=unknown
+    fi
+    last=$(last_reply)
+    [ -z "$last" ] || echo "last_sync=$last"
+    if [ -e /dev/rtc0 ]; then echo rtc=yes; else echo rtc=no; fi
+    if ip route show default 2>/dev/null | grep -q .; then echo network=yes; else echo network=no; fi
+}
+
+# The zones a person chooses from: Region/City, as timedatectl lists them.
+zones() { timedatectl list-timezones 2>/dev/null || (cd $zoneinfo && find . -type f | sed 's#^\./##' | grep -v '^posix/\|^right/\|\.' | sort); }
+
+# A zone name is a path under /usr/share/zoneinfo with no way out of it (the same rule as
+# provision.toml's).
+valid_zone() {
+    case "$1" in
+    '' | /* | *..* | *//* | */ ) return 1 ;;
+    *[!A-Za-z0-9/_+-]*) return 1 ;;
+    esac
+    [ -f "$zoneinfo/$1" ]
+}
+
+# The hardware clock from the system clock, where the board has one.
+write_rtc() {
+    [ -e /dev/rtc0 ] || return 0
+    command -v hwclock >/dev/null 2>&1 || return 0
+    hwclock -w 2>/dev/null || echo "nib clock: the hardware clock could not be written" >&2
+}
+
+# The network, if it is off and the system starts it on demand: up to 20 s for a route.
+want_network() {
+    ip route show default 2>/dev/null | grep -q . && return 0
+    [ ! -x /usr/lib/nibos/nib-net ] || /usr/lib/nibos/nib-net up >/dev/null 2>&1 || true
+    [ ! -x /usr/lib/nibos/nib-wifi ] || /usr/lib/nibos/nib-wifi on >/dev/null 2>&1 || true
+    n=0
+    while [ $n -lt 40 ]; do
+        ip route show default 2>/dev/null | grep -q . && return 0
+        sleep 0.5
+        n=$((n + 1))
+    done
+    return 1
+}
+
+# Up to 30 s for timesyncd to hear from a server and set the clock (a pool server that
+# doesn't answer costs 10 s). Restarting it forgets the
+# last reply, so a reply seen now is a new one (the kernel's "synchronised" flag alone would
+# still say yes from before).
+wait_sync() {
+    n=0
+    while [ $n -lt 60 ]; do
+        if [ -n "$(timedatectl show-timesync -p NTPMessage --value 2>/dev/null)" ] && [ "$(tdc NTPSynchronized)" = yes ]; then
+            return 0
+        fi
+        sleep 0.5
+        n=$((n + 1))
+    done
+    return 1
+}
+
+sync_now() {
+    need_root sync
+    if ! want_network; then
+        echo "nib clock: no network: turn Wi-Fi on and try again, or set the time by hand (nib clock set)" >&2
+        exit 4
+    fi
+    [ "$(tdc NTP)" = yes ] || timedatectl set-ntp true
+    systemctl restart systemd-timesyncd.service
+    if wait_sync; then
+        write_rtc
+        echo "synced: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+    else
+        echo "nib clock: the time servers didn't answer in 30 s: try again, or set the time by hand (nib clock set)" >&2
+        exit 5
+    fi
+}
+
+set_zone() {
+    need_root zone
+    z=${1:-}
+    valid_zone "$z" || { echo "nib clock: no time zone '$z' (nib clock zones lists them)" >&2; exit 2; }
+    timedatectl set-timezone "$z"
+    # Kept on the state partition: the root (and /etc/localtime with it) is replaced by updates.
+    if [ -d "$state" ]; then
+        printf '%s\n' "$z" > "$state/timezone.tmp"
+        mv -f "$state/timezone.tmp" "$state/timezone"
+        sync
+    fi
+    echo "zone: $z ($(date '+%Z %z'))"
+}
+
+set_time() {
+    need_root set
+    t=${1:-}
+    case "$t" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\ [0-9][0-9]:[0-9][0-9] | [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\ [0-9][0-9]:[0-9][0-9]:[0-9][0-9]) ;;
+    *) echo "usage: nib clock set 'YYYY-MM-DD HH:MM[:SS]'" >&2; exit 2 ;;
+    esac
+    # timedated refuses to set the time while it is synchronised from the network; and it
+    # refuses a time before systemd was built, in which case network time goes back on.
+    was=$(tdc NTP)
+    [ "$was" != yes ] || timedatectl set-ntp false
+    if ! timedatectl set-time "$t"; then
+        [ "$was" != yes ] || timedatectl set-ntp true
+        echo "nib clock: the time was not set (a date before this system was built is refused)" >&2
+        exit 1
+    fi
+    write_rtc
+    echo "set: $(date '+%Y-%m-%d %H:%M:%S %Z'); network time is off until 'nib clock ntp on'"
+}
+
+set_ntp() {
+    need_root ntp
+    case "${1:-}" in
+    on)
+        timedatectl set-ntp true
+        # With the network up already, give the servers a moment to answer.
+        if ip route show default 2>/dev/null | grep -q .; then
+            systemctl restart systemd-timesyncd.service
+            if wait_sync; then write_rtc; echo "ntp: on, synced: $(date '+%Y-%m-%d %H:%M:%S %Z')"; else echo "ntp: on, not synced yet"; fi
+        else
+            echo "ntp: on, no network yet"
+        fi ;;
+    off) timedatectl set-ntp false; echo "ntp: off" ;;
+    *) echo "usage: nib clock ntp on|off" >&2; exit 2 ;;
+    esac
+}
+
+case "${1:-status}" in
+status) status ;;
+sync) sync_now ;;
+zones) zones ;;
+zone) set_zone "${2:-}" ;;
+set) set_time "${2:-}" ;;
+ntp) set_ntp "${2:-}" ;;
+-h | --help | help) sed -n '2,9p' "$0" ;;
+*) echo "usage: nib clock [status|sync|zones|zone ZONE|set 'YYYY-MM-DD HH:MM'|ntp on|off]" >&2; exit 2 ;;
+esac

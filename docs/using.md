@@ -132,6 +132,30 @@ nib help                                # the commands this device has
 | `deferred` | a productivity setup | once start-up has finished, at the lowest priority |
 | `demand` | a game player | only when something starts `nibos-network.target` |
 
+## Date and time
+
+The clock is set from the network by systemd-timesyncd whenever the network is up. On the
+DSlot edition Wi-Fi comes up on demand, so after a power-off the time may be hours out until
+something brings the network up; DSlot's **System → Date and time** page shows the time, the
+zone and where the time came from, and offers **Sync now**, a zone picker and setting the time
+by hand. The same from a shell:
+
+```bash
+nib clock                               # the time, the zone, set from the network or not
+sudo nib clock sync                     # Wi-Fi up if it is off, then the time servers
+nib clock zones                         # the zones to choose from
+sudo nib clock zone Asia/Tokyo          # the zone, kept across updates
+sudo nib clock set '2026-10-27 11:30'   # by hand: network time goes off
+sudo nib clock ntp on                   # network time back on
+```
+
+A time set by hand turns network time off (it would be put straight back otherwise) until
+`ntp on` or the page's **Use network time**. The zone is kept on the state partition
+(`/var/lib/nibos/state/timezone`), so an update, which replaces the root, keeps it;
+`provision.toml`'s `timezone` sets the same file. Where the board has a hardware clock
+(`/dev/rtc0`, the RG DS+ has one) it is written after every set and sync, so the time survives
+a power-off.
+
 ## Updates
 
 On an image card, `nib update` updates the whole system from nibOS's releases: `nib update

@@ -42,7 +42,7 @@ leaves the GPT in sectors 1-33 alone):
 | p2 `NIBOS` (FAT32) | `README.txt`, `provision.toml.example`, `NOTICE`, `packages.txt`, `licenses/` | 128 MiB |
 | p3 `nibos-root-a` (ext4) | The root, with `/boot` (the fallback's `extlinux.conf`, kernel, DTB); grown to its partition on the first boot | 3 GiB |
 | p4 `nibos-root-b` | Empty, for A/B updates | 3 GiB |
-| p5 `nibos-state` (ext4) | What `provision.toml` sets: Wi-Fi networks, SSH keys, the data card, the first boot's marker; mounted at `/var/lib/nibos/state` | 512 MiB |
+| p5 `nibos-state` (ext4) | What `provision.toml` sets: Wi-Fi networks, SSH keys, the data card, the time zone (and `nib clock zone`'s), the first boot's marker; mounted at `/var/lib/nibos/state` | 512 MiB |
 | p6 `NIBOS-DATA` (exFAT) | `Roms/`, `BIOS/`, `Saves/`, `APPS/` as DSlot expects, and `nibos/log/` (the boot logs); made on the first boot over the rest of the card, mounted at `/mnt/roms` | the rest |
 
 - The image is about 7 GB before compression and much less compressed (p4 is empty and p6

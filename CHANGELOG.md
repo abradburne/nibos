@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **The clock can be seen and set.** `nib clock` shows the time, the zone and whether the time
+  came from the network; `nib clock sync` brings Wi-Fi up and waits for the time servers,
+  `nib clock zone` sets the zone and keeps it on the state partition so an update doesn't lose
+  it (`nibos-provision` puts it back at boot; `provision.toml`'s still wins), `nib clock set`
+  sets the time by hand with network time off until `nib clock ntp on`, and the hardware clock
+  is written after each. DSlot's System page has it as **Date and time**
+  ([using.md](docs/using.md#date-and-time)). Until now a DSlot card showed UTC, and the time
+  was hours out until Wi-Fi came up.
+
 ## 0.1.0-alpha2
 
 - **A card that wasn't written right says so.** Once per write of the card, about a minute
