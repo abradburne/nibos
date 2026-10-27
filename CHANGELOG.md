@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha4
 
 - **The kernel names what it kills.** `kernel.print-fatal-signals` is on (hw's sysctl.d), so a
   program that dies of a signal it did not handle leaves a line with its name in the kernel log,
