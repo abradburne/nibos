@@ -14,7 +14,7 @@ NIBOS_ROOT=$(cd "$startdir/.." && pwd)
 
 pkgname=nibos-hw
 pkgver=0.1.0
-pkgrel=47
+pkgrel=48
 pkgdesc="nibOS hardware layer for the $BOARD_NAME: one gamepad, audio routing, lid and power, battery protect, LEDs, network on demand, the console's on-screen keyboard, the radios' switches, system updates"
 arch=(aarch64)
 # nibos-keys links nibkit (MIT) and draws in its Roboto Condensed (SIL OFL 1.1).

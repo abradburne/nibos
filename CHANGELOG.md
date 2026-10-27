@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **The kernel names what it kills.** `kernel.print-fatal-signals` is on (hw's sysctl.d), so a
+  program that dies of a signal it did not handle leaves a line with its name in the kernel log,
+  and so in a bug report. Found through one: the RT watchdog's kill of DSperate at start-up
+  ("RT Watchdog Timeout (hard)"), which DSlot could only report as "signal 9". DSperate's
+  start-up now runs as an ordinary task until emulation begins (it reached SDL as a real-time
+  task under the 200 ms budget PipeWire leaves in DSlot, and the kernel killed it when that
+  stretch took longer than 200 ms of CPU, as on a slow clock).
+
 ## 0.1.0-alpha3
 
 - **A bug report carries the kernel's first lines too.** The report `nib bug-report` makes (and
