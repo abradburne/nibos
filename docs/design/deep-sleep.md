@@ -97,12 +97,19 @@ setting away.
 - Dry run on the dev card: `nib sleep off-after 2`, `/run/nibos/sleep-off-dry-run`, `systemctl
   suspend`: the device woke 2 minutes later on its own and the journal has
   `nibos-sleep-off: dry run: asleep the set time on battery, would power off`.
-- The real power-off run needs someone at the device to press the power key afterwards.
+- The real run, 2026-10-27 21:45 JST, `nib sleep off-after 2`, the lid open: `suspend entry`
+  21:45:08, `nibos-sleep-off: asleep the set time on battery: powering off` 21:47:09.2 (the
+  alarm), `PM: suspend exit` 21:47:09.5, `poweroff requested ... (unit nibos-sleep-off.service)`
+  21:47:12, DSlot stopped, the goodbye picture, `Journal stopped` 21:47:14.5: off 6.3 s after the
+  wake. The power key then booted it: the shelf 5.5 s after the kernel started (`systemd-analyze`:
+  6.9 s in all), `nibos-charge-boot: power-on source 0x80` (the key). The gauge's `charge_now`
+  across the off time isn't usable for the off drain: at boot the driver re-estimates the count
+  (18 mAh "gone" in 5.7 minutes, most of it the re-estimate under the boot's load).
 
 ## Open
 
-- **The "off" drain**, and the RK817's power-on sources (is its RTC alarm one?): a run with
-  someone at the device.
+- **The "off" drain** needs a meter or a long off interval with the voltage read before and after
+  (the gauge re-estimates at boot); and whether the RK817's RTC alarm is a power-on source.
 - **Why deep sleep draws 49 mA.** The RK3568 in BSP deep sleep is reported around 10-20 mA.
   Candidates: TF-A's default sleep configuration (mainline has no `rockchip-suspend` node for the
   RK3568, so the 24 MHz oscillator and the PMU PLLs may stay up), `vcc_3v3` and `vcc_1v8` kept
