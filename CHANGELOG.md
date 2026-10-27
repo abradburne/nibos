@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A bug report carries the kernel's first lines too.** The report `nib bug-report` makes (and
+  DSlot's Y: send a bug report) adds the first 150 lines of the boot log to the last 3000: the
+  kernel's account of the board, its memory and its command line, which a long session's tail
+  left out, and which a crash report needs to make sense of an out-of-memory kill.
 - **A DSlot started by hand gets past the safe mode.** Once the safe mode is up it forgets
   DSlot's failures, and a start of `dslot.service` (its menu, `nib boot-ui`, `systemctl start`)
   stops the safe mode first. Until now the start was refused as repeated too quickly, or DSlot
