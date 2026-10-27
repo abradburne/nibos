@@ -1,0 +1,43 @@
+#!/bin/sh
+# nib sleep: how long the device stays asleep on battery before it powers itself off
+#
+#   nib sleep                        the time, in minutes, or never
+#   nib sleep off-after MINUTES      from now on, kept across updates (1 to 1440)
+#   nib sleep off-after never        asleep until woken, however long
+#
+# Asleep (suspend to RAM, the RK3568's deep sleep) the RG DS+ still draws about 50 mA: a full
+# battery is gone in about three and a half days. Asleep on battery for this long, the device
+# wakes itself (an RTC alarm, set by the sleep hook system-sleep/nibos-sleep-off) and powers
+# off cleanly; at shutdown DSlot and the emulators save their resume state as they do for the
+# power menu, so the game is a Resume away after the boot (~6 s to the shelf). On the charger
+# it sleeps on, however long. The setting is /var/lib/nibos/state/sleep-off-after (minutes, or
+# `never`), on the state partition so an update keeps it; unset means 10 minutes. The wheel
+# group may set it with sudo (nibos-sleep sudoers). docs/design/deep-sleep.md.
+set -eu
+state=${NIBOS_STATE:-/var/lib/nibos/state}
+file=$state/sleep-off-after
+default=10
+
+case "${1:-status}" in
+status)
+    v=$(cat "$file" 2>/dev/null || echo "$default")
+    case "$v" in
+    never) echo "off-after: never" ;;
+    *) echo "off-after: $v min" ;;
+    esac
+    ;;
+off-after)
+    v=${2:-}
+    case "$v" in
+    never) ;;
+    *[!0-9]* | '') echo "usage: nib sleep off-after MINUTES|never" >&2; exit 2 ;;
+    *) [ "$v" -ge 1 ] && [ "$v" -le 1440 ] || { echo "nib sleep: 1 to 1440 minutes" >&2; exit 2; } ;;
+    esac
+    [ "$(id -u)" = 0 ] || { echo "nib sleep: off-after needs root (sudo nib sleep off-after $v)" >&2; exit 1; }
+    [ -d "$state" ] || { echo "nib sleep: no $state" >&2; exit 1; }
+    # Replaced whole, so a failed save changes nothing.
+    printf '%s\n' "$v" > "$file.tmp" && mv -f "$file.tmp" "$file"
+    echo "off-after: $v"
+    ;;
+*) echo "usage: nib sleep [off-after MINUTES|never]" >&2; exit 2 ;;
+esac

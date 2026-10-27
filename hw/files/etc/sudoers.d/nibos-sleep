@@ -1,0 +1,3 @@
+# nibos-hw: the wheel group may set how long the device sleeps on battery before it powers off
+# (nib sleep off-after) without a password, so a settings screen (DSlot's System page) can offer it.
+%wheel ALL=(root) NOPASSWD: /usr/lib/nibos/nib-sleep

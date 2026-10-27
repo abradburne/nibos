@@ -79,6 +79,14 @@ down, so it can't tell a tap from a hold; the board's logind drop-in tells it to
   2026-10-19); Rockchip's PMICs take several seconds, so the 1 s hold is well clear of it, but
   time it with a stopwatch before relying on a number.
 
+**Asleep too long on battery, it powers off.** Deep sleep still draws ~49 mA on the RG DS+
+(s2idle 123 mA; a full battery is gone in 3.6 days), and this kernel has nothing deeper with
+the memory kept. So `system-sleep/nibos-sleep-off` sets an RTC alarm `nib sleep off-after`
+minutes ahead (default 10; `never` turns it off; `/var/lib/nibos/state/sleep-off-after`, kept
+across updates) when the device sleeps on battery, and if that alarm is what woke it and the
+charger is still out, powers off cleanly (DSlot and the emulators save the game's resume state at
+shutdown). On the charger it sleeps on. [docs/design/deep-sleep.md](../docs/design/deep-sleep.md).
+
 `system-sleep/nibos-unbind` unbinds the devices in `NIBOS_SLEEP_UNBIND` before sleep and binds
 them again after; on the RG DS+, the USB host controller, which hangs the kernel when it is
 suspended. Wi-Fi needs no hook: two kernel patches power the card off in suspend and set it up
@@ -204,7 +212,7 @@ member it held up `local-fs.target`).
 
 **`nib`.** `/usr/bin/nib` runs `/usr/lib/nibos/nib-<command>`: this package brings `nib net`,
 `nib wifi`, `nib bluetooth`, `nib brightness`, `nib lid`, `nib battery`, `nib audio`,
-`nib update`, `nib bug-report` and `nib clock` (the time, zone and network time, for DSlot's
+`nib update`, `nib bug-report`, `nib sleep` (power off after this long asleep on battery) and `nib clock` (the time, zone and network time, for DSlot's
 Clock page: `sudoers.d/nibos-clock` lets wheel run it), the boot UI brings `nib boot-ui`, and
 `nib help` lists what is installed.
 

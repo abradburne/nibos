@@ -1,0 +1,63 @@
+#!/bin/sh
+# nibos-hw: asleep on battery longer than `nib sleep off-after` (default 10 minutes), the device
+# powers itself off: deep sleep still draws ~50 mA on the RG DS+ (docs/design/deep-sleep.md).
+#
+# pre:  on battery, with the setting not `never`, set the RTC's wake alarm that far ahead (an
+#       earlier alarm someone else set is left alone, and nothing is recorded) and record it in
+#       /run/nibos/sleep-off-alarm.
+# post: if the recorded alarm is what woke the device (the RTC has reached it and the kernel has
+#       cleared it: an alarm that fired reads empty, one that didn't still shows its time) and
+#       the charger is still out, power off, 2 s from now through a transient timer, so the
+#       suspend's own job is over first. Otherwise clear our alarm so it can't fire later.
+#       With /run/nibos/sleep-off-dry-run present it only logs what it would do.
+#
+# Called by systemd-sleep with $1 = pre|post. Always exits 0: a failing hook must not stop the
+# device from sleeping or waking.
+run=/run/nibos
+record=$run/sleep-off-alarm
+rtc=/sys/class/rtc/rtc0
+state=${NIBOS_STATE:-/var/lib/nibos/state}
+
+[ -e $rtc/wakealarm ] || exit 0
+on_charger() { [ "$(cat $run/charger/online 2>/dev/null)" = 1 ]; }
+
+case "$1" in
+pre)
+    rm -f "$record"
+    on_charger && exit 0
+    minutes=$(cat "$state/sleep-off-after" 2>/dev/null || echo 10)
+    case "$minutes" in never | '' | *[!0-9]*) exit 0 ;; esac
+    now=$(cat $rtc/since_epoch)
+    alarm=$((now + minutes * 60))
+    other=$(cat $rtc/wakealarm)
+    if [ -n "$other" ] && [ "$other" -le "$alarm" ]; then
+        echo "nibos-sleep-off: an alarm is already set for $((other - now)) s: leaving it"
+        exit 0
+    fi
+    # A set alarm must be cleared before another is written.
+    [ -z "$other" ] || echo 0 > $rtc/wakealarm
+    if echo "$alarm" > $rtc/wakealarm; then
+        echo "$alarm" > "$record"
+        echo "nibos-sleep-off: asleep on battery for $minutes min, the device powers off"
+    fi
+    ;;
+post)
+    [ -f "$record" ] || exit 0
+    alarm=$(cat "$record")
+    rm -f "$record"
+    now=$(cat $rtc/since_epoch)
+    if [ -z "$(cat $rtc/wakealarm)" ] && [ "$now" -ge $((alarm - 2)) ] && ! on_charger; then
+        if [ -e $run/sleep-off-dry-run ]; then
+            echo "nibos-sleep-off: dry run: asleep the set time on battery, would power off"
+        else
+            echo "nibos-sleep-off: asleep the set time on battery: powering off"
+            systemd-run --no-block --quiet --collect --on-active=2 --unit=nibos-sleep-off \
+                systemctl poweroff
+        fi
+    else
+        # Woken early (or plugged in): our alarm must not fire later.
+        [ -z "$(cat $rtc/wakealarm)" ] || echo 0 > $rtc/wakealarm
+    fi
+    ;;
+esac
+exit 0

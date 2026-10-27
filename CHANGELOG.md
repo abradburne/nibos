@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Asleep too long on battery, the device powers off.** Deep sleep, already the deepest state
+  this kernel offers with the memory kept, still draws about 49 mA on the RG DS+ (s2idle 123 mA):
+  a full battery in 3.6 days. When it sleeps on battery, a sleep hook now sets the RTC's alarm
+  `nib sleep off-after` minutes ahead (default 10, `never` to turn it off, kept across updates),
+  and if that alarm is what wakes it and the charger is still out, it powers off cleanly; the
+  emulators save the game's resume state at shutdown as for the power menu, so after the ~6 s
+  boot the game is a Resume away. On the charger it sleeps on. The measurements, the states the
+  board has and what hibernation would cost: docs/design/deep-sleep.md.
+
 ## 0.1.0-alpha4
 
 - **The kernel names what it kills.** `kernel.print-fatal-signals` is on (hw's sysctl.d), so a

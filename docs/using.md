@@ -147,6 +147,8 @@ nib clock zones                         # the zones to choose from
 sudo nib clock zone Asia/Tokyo          # the zone, kept across updates
 sudo nib clock set '2026-10-27 11:30'   # by hand: network time goes off
 sudo nib clock ntp on                   # network time back on
+nib sleep                               # asleep this long on battery, it powers off (10 min)
+sudo nib sleep off-after 60             # an hour instead; `never` sleeps until woken
 ```
 
 A time set by hand turns network time off (it would be put straight back otherwise) until
