@@ -137,4 +137,10 @@ Tried and measured, or found not to work; the source says more. Add to it when s
 - OHCI/EHCI suspended: hangs; unbound around sleep.
 - udev LED rules on "change": loop forever.
 - Mainline thermal trips at 70/75 °C: 4.3% of frames late; stock's 75/85.
+- The stock firmware's TF-A sleep configuration (`rockchip,sleep-mode-config` 0x5ec over the
+  vendor SIP call, 2026-10-27): the device hangs at suspend entry, nothing wakes it; its logic-off
+  resume needs the vendor loader. Don't send CENTER_OFF or ARMOFF_LOGOFF without a resume path
+  in SPL (docs/design/deep-sleep.md, "Where the drain goes").
+- Wi-Fi and Bluetooth blocked before deep sleep (2026-10-29): the drain didn't move (48.7 to 46.1
+  mA, inside the noise); the RTL8821CS isn't where the sleep current goes.
 - schedutil's `rate_limit_us` raised from 256 µs to 10 ms (2026-10-21): frequency changes 98/s to 52/s and the governor's wakeups with them, but the battery current *rose*, 488 mA to 502-529 mA on the idle shelf (coulomb counter, 90 s windows). Keep the default.

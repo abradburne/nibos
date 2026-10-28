@@ -707,7 +707,13 @@
 		clocks = <&cru I2S1_MCLKOUT_TX>;
 		interrupt-parent = <&gpio0>;
 		interrupts = <RK_PA3 IRQ_TYPE_LEVEL_LOW>;
-		pinctrl-0 = <&i2s1m0_mclk &pmic_int_l>;
+		/*
+		 * pmic_sleep: GPIO0_A2 as the PMU's sleep output, which the
+		 * RK817's SLEEP pin (and the SYR827's VSEL) follow. Without it
+		 * the PMIC never enters its sleep state in deep sleep and the
+		 * regulator-state-mem tables below do nothing.
+		 */
+		pinctrl-0 = <&i2s1m0_mclk &pmic_int_l &pmic_sleep>;
 		pinctrl-names = "default";
 		#sound-dai-cells = <0>;
 		system-power-controller;
@@ -1140,6 +1146,11 @@
 		pmic_int_l: pmic-int-l {
 			rockchip,pins =
 				<0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+
+		pmic_sleep: pmic-sleep {
+			rockchip,pins =
+				<0 RK_PA2 1 &pcfg_pull_none>;
 		};
 	};
 

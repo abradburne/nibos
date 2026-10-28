@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **The PMIC really sleeps in deep sleep.** The RK817's SLEEP pin follows the SoC's `pmic_sleep`
+  output, which the device tree never muxed (GPIO0_A2 was a floating GPIO), so the regulator
+  states set for sleep never applied. Now they do: 4-8 mA less asleep (52 to 49 mA by the coulomb
+  counter, 48 to 41 mA by the gauge's current average). Where the rest goes, and what was tried,
+  is in docs/design/deep-sleep.md.
+
+- **Asleep with the lid closed, the device powers off after the set time, as it should.** The
+  power-off came 2 s after the alarm woke the device, but by then logind had put it back to
+  sleep for the still-closed lid and refused the power-off, so it woke and slept again every
+  hour all night instead. The sleep hook now holds off sleep and the lid while it asks for the
+  power-off, and asks again until it is taken. DSlot's System page sets how long, **Power off
+  when asleep** (`nib sleep off-after` over SSH).
+
 - **An updated system has its whole partition again.** An update writes the new system with the
   image's small root file system (1.7 GB), and the step that grows it to fill its 3 GB partition
   ran only on a card's first start: its "done" mark is carried over by updates, so every updated

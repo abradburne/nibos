@@ -80,8 +80,10 @@ away either way.
   left alone and nothing is recorded). After waking, if its recorded alarm has been reached and
   cleared by the kernel (so the alarm woke the device, not a lid or key) and the charger is
   still out, it logs `nibos-sleep-off: asleep the set time on battery: powering off` and starts
-  `systemctl poweroff` through a transient timer 2 s later, so the suspend's own job finishes
-  first. Woken early, it clears the alarm so it can't fire later. On the charger it does nothing
+  a transient service that takes a block inhibitor on sleep and the lid switch at once
+  (`systemd-inhibit --what=sleep:handle-lid-switch`) and then asks for `systemctl poweroff`
+  every 0.5 s until logind takes it (it refuses while the suspend that woke is still finishing:
+  "Action suspend already in progress"). Woken early, it clears the alarm so it can't fire later. On the charger it does nothing
   (the device charges asleep, and `nibos-charge-boot`'s own loop sleeps it again after any wake).
   `/run/nibos/sleep-off-dry-run` makes it log instead of powering off.
 - **Risk to waking:** none added. The alarm is set only on top of a sleep that already works,
@@ -89,9 +91,13 @@ away either way.
   hook exits 0, as the others do. The one new state is "off", which the power key leaves. The
   hook never touches the charger, so the charging path is unchanged.
 - **Interactions:** `nib lid ignore` doesn't matter (the hook runs on any suspend). The 3 s
-  power-key hold-off after waking (`nibos-input`) doesn't matter: nothing presses it. logind's
-  5 s lid hold-off would re-suspend a device woken with the lid closed; the power-off is queued
-  2 s after the hook, so it wins.
+  power-key hold-off after waking (`nibos-input`) doesn't matter: nothing presses it. logind
+  handles a lid that is still closed by suspending again about 2 s after the wake, its 5 s
+  hold-off notwithstanding. The first version queued the power-off on a 2 s timer and lost that
+  race every time: on 2026-10-28 the device, lid closed all night, woke each hour, had its
+  power-off refused ("Action suspend already in progress") and slept again, from 100% to 26%.
+  The inhibitor, taken before logind comes round, keeps it from suspending, and the retries
+  wait out the suspend that is finishing.
 
 ## Tested
 
@@ -111,14 +117,54 @@ away either way.
 
 - **The "off" drain** needs a meter or a long off interval with the voltage read before and after
   (the gauge re-estimates at boot); and whether the RK817's RTC alarm is a power-on source.
-- **Why deep sleep draws 49 mA.** The RK3568 in BSP deep sleep is reported around 10-20 mA.
-  Candidates: TF-A's default sleep configuration (mainline has no `rockchip-suspend` node for the
-  RK3568, so the 24 MHz oscillator and the PMU PLLs may stay up), `vcc_3v3` and `vcc_1v8` kept
-  on (the AW88166 amps, the touch controller, the SD card's logic), the hall sensor, `vdd_logic`
-  at 0.9 V. Each is a regulator-state or firmware change with a hang risk, to be tried one at a
-  time with an RTC alarm as the safety net. Lower it and the power-off timer matters less.
+- **Why deep sleep draws ~45 mA.** See "Where the drain goes" below: the PMIC now really sleeps
+  (4-8 mA), the radios aren't it, and what is left is the SoC under TF-A's default sleep (PLLs and
+  the 24 MHz oscillator up). The stock firmware's deeper TF-A configuration needs a resume path
+  through the loader that mainline SPL doesn't have.
 - **DSlot's System page**: show and set `nib sleep off-after` (needs `nibkit`), a follow-up in
   dslot.
+
+## Where the drain goes (2026-10-29)
+
+The 49 mA was hunted one change at a time, each measured the same way (below), 10 minute
+RTC-woken deep sleeps on nibOS 0.1.0-alpha6, DSlot on the shelf, charger out, battery 26% to
+24%. The two columns: the coulomb counter over the sleep (the awake seconds at each end make it
+~2 mA high) and the gauge's `current_avg` read right after waking (its average of the last
+minutes asleep).
+
+| Change | Coulomb counter | `current_avg` | Kept |
+|---|---|---|---|
+| Nothing (the alpha6 kernel, the night before) | 52.1 mA | 48.5 mA | |
+| The stock firmware's TF-A sleep configuration (`rockchip,sleep-mode-config` 0x5ec, `wakeup-config` 0x10, sent over the vendor SIP call from a test module) | hung: no wake by RTC, power key or lid; a 15 s power-key hold | | no |
+| GPIO0_A2 muxed to the PMU's `pmic_sleep` output (the RK817's SLEEP pin and the SYR827's VSEL) | 48.7 mA | 40.6 mA | **yes** |
+| ... and Wi-Fi and Bluetooth switched off (`nib wifi off`, `nib bluetooth off`) before sleeping | 46.1 mA | 40.4 mA | no change |
+
+**The PMIC never slept.** The device tree's `regulator-state-mem` tables (CPU, GPU, panel, SD,
+DVP and OTG rails off, logic at 0.9 V) take effect only when the RK817's SLEEP pin is asserted,
+which the PMU does through GPIO0_A2's `pmic_sleep` function during TF-A's suspend. Mainline's
+`rk8xx` driver switches the RK817's pin function to "sleep" at every suspend, but the RG DS tree
+this board's device tree derives from never muxes the SoC pin (`pinctrl` showed it "MUX
+UNCLAIMED"), so the pin stayed a floating GPIO and the whole table was inert. The stock tree muxes
+it in its `pmic-sleep` pinctrl state; mainline's PineNote muxes it in its default state, which is
+what nibOS now does (the `pmic_sleep` node in the board's pinctrl, in the rk817's `pinctrl-0`).
+Worth 4-8 mA, and the regulator table now means what it says.
+
+**The stock TF-A configuration hangs.** The vendor kernel hands TF-A a sleep mode over
+`SIP_SUSPEND_MODE` (0x82000003); the stock DTB's 0x5ec is CENTER_OFF, ARMOFF_LOGOFF, PMIC_LP,
+HW_PLLS_OFF, PMUALIVE_32K, OSC_DIS and 32K_PVTM, with GPIO as the only wake source. Sent as is
+(TF-A v1.46, the stock's, accepted all three calls), the first sleep never came back: with the
+logic domain off, waking goes through the boot ROM and the vendor loader's resume path, which
+mainline SPL under Falcon doesn't have. The remaining bits (PLLs off, oscillator off, PMU on the
+PVTM 32 kHz) don't need that path and are the likely home of most of the remaining 40 mA; each is
+an experiment that can need a hard power-cycle, so each needs the user's OK first.
+
+**Not it:** the RTL8821CS (its `vcc_wifi` is `regulator-always-on`, as is the boot card's
+`vcc3v3_sd`; with both radios blocked the drain didn't move), the touch controller (the goodix
+driver puts it in its screen-off state), the AW88166 amps (powered down between streams), the
+hall sensor (a bare GPIO input, nothing to switch), the LEDs (`leds-gpio` turns them off in
+suspend; the charging LED is kept only while the charger is in, when the drain doesn't matter).
+`/sys/kernel/debug/wakeup_sources` shows nothing holding the device up, and `suspend_stats` no
+failed steps.
 
 ## How it was measured
 
