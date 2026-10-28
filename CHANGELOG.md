@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha6
 
+- **Which systems earn achievements**, on DSlot 0.4.1's Achievements page: DS, Game Boy and Game
+  Boy Color for now, more coming. And DSlot hears the buttons again when nibos-input makes its
+  gamepad anew (an update of nibos-hw, or after a crash), rather than only the power key.
 - **Writing a new image keeps your settings.** It already kept NIBOS-DATA (games and saves), but
   the settings live in the home folder, which a new image replaces: DSlot's and each emulator's
   settings (a console's screen shape, say), play time and favourites went. nibOS now keeps a
