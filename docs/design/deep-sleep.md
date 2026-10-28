@@ -142,6 +142,7 @@ minutes asleep).
 | The stock firmware's TF-A sleep configuration (`rockchip,sleep-mode-config` 0x5ec, `wakeup-config` 0x10, sent over the vendor SIP call from a test module) | hung: no wake by RTC, power key or lid; a 15 s power-key hold | | no |
 | GPIO0_A2 muxed to the PMU's `pmic_sleep` output (the RK817's SLEEP pin and the SYR827's VSEL) | 48.7 mA | 40.6 mA | **yes** |
 | ... and Wi-Fi and Bluetooth switched off (`nib wifi off`, `nib bluetooth off`) before sleeping | 46.1 mA | 40.4 mA | no change |
+| TF-A's sleep mode set to ARMOFF and HW_PLLS_OFF only (0x42, the stock's PLL bit without its logic-off and oscillator bits) | never woke, nor by the power key or lid: a 15 s power-key hold | | no |
 
 **The PMIC never slept.** The device tree's `regulator-state-mem` tables (CPU, GPU, panel, SD,
 DVP and OTG rails off, logic at 0.9 V) take effect only when the RK817's SLEEP pin is asserted,
@@ -159,8 +160,13 @@ HW_PLLS_OFF, PMUALIVE_32K, OSC_DIS and 32K_PVTM, with GPIO as the only wake sour
 (TF-A v1.46, the stock's, accepted all three calls), the first sleep never came back: with the
 logic domain off, waking goes through the boot ROM and the vendor loader's resume path, which
 mainline SPL under Falcon doesn't have. The remaining bits (PLLs off, oscillator off, PMU on the
-PVTM 32 kHz) don't need that path and are the likely home of most of the remaining 40 mA; each is
-an experiment that can need a hard power-cycle, so each needs the user's OK first.
+PVTM 32 kHz) don't need that path and are the likely home of most of the remaining 40 mA. The
+first of them, HW_PLLS_OFF with ARMOFF (0x42), was tried with the user's OK: the device went to
+sleep and never came back from the RTC alarm, the power key or the lid; the user held the power
+key 15 s to reset it (it booted its slot as before). Whether TF-A v1.46 needs more of
+the stock's bits together, or a PLL restore the mainline clock driver doesn't expect, isn't
+known without TF-A's source; the series stopped there, as agreed. A control run with ARMOFF
+alone (0x02), to show the SIP path itself reproduces TF-A's default, wasn't done.
 
 **Not it:** the RTL8821CS (its `vcc_wifi` is `regulator-always-on`, as is the boot card's
 `vcc3v3_sd`; with both radios blocked the drain didn't move), the touch controller (the goodix

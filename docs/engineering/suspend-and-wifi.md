@@ -141,6 +141,8 @@ Tried and measured, or found not to work; the source says more. Add to it when s
   vendor SIP call, 2026-10-27): the device hangs at suspend entry, nothing wakes it; its logic-off
   resume needs the vendor loader. Don't send CENTER_OFF or ARMOFF_LOGOFF without a resume path
   in SPL (docs/design/deep-sleep.md, "Where the drain goes").
+- TF-A's sleep mode ARMOFF|HW_PLLS_OFF (0x42) over the SIP call (2026-10-29): sleeps, never
+  wakes by RTC, key or lid; a 15 s power-key hold.
 - Wi-Fi and Bluetooth blocked before deep sleep (2026-10-29): the drain didn't move (48.7 to 46.1
   mA, inside the noise); the RTL8821CS isn't where the sleep current goes.
 - schedutil's `rate_limit_us` raised from 256 µs to 10 ms (2026-10-21): frequency changes 98/s to 52/s and the governor's wakeups with them, but the battery current *rose*, 488 mA to 502-529 mA on the idle shelf (coulomb counter, 90 s windows). Keep the default.
