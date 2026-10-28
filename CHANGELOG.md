@@ -6,6 +6,10 @@
   version the 30 s check that confirms it held the start-up open, and the radios, which wait for
   the start-up to finish, came back half a minute late, with DSlot's switch showing Wi-Fi off
   meanwhile; the check no longer holds it (`nibos-boot-good` is a simple unit, like the bootlog's).
+- **Wi-Fi left on reads as on while it starts.** Until the driver loads, a few seconds after
+  start-up, `nib wifi status` (and so DSlot's switch) said off; it now gives the switch as it was
+  left ("on", then "starting"). Switching it off in those seconds loads the driver first and
+  blocks it, rather than being undone when the driver appears with the switch it kept.
 
 ## 0.1.0-alpha5
 

@@ -9,15 +9,37 @@
 # first starting the network if it isn't (`nib net up`, in the demand and deferred modes).
 # The wheel group may run it (/dev/rfkill, 72-nibos-rfkill.rules). `nib net` is how the system
 # starts both radios (its modes); this is the user's Wi-Fi switch. hw/README.md, "Network modes".
+#
+# Before the drivers are loaded (the first seconds after start-up, longer on an update's trial
+# boot) there is no radio to read or block: status gives the switch as systemd-rfkill keeps it,
+# which nibos-radios-restore is about to put back, rather than "off"; and off loads the driver
+# first, or the kept "on" would come back over it when the driver appears.
 set -eu
+# The switch as kept across restarts (/var/lib/systemd/rfkill/*:wlan, 0 unblocked): on, off, or
+# nothing when it was never switched.
+kept() {
+    for f in /var/lib/systemd/rfkill/*:wlan; do
+        case "$(cat "$f" 2>/dev/null)" in 0) echo on; return ;; 1) echo off; return ;; esac
+    done
+}
+# Whether the Wi-Fi radio is there to switch.
+present() { grep -qx wlan /sys/class/rfkill/rfkill*/type 2>/dev/null; }
 case "${1:-status}" in
 on)
     systemctl -q is-active nibos-network.target || /usr/lib/nibos/nib-net up
     exec rfkill unblock wlan ;;
-off) exec rfkill block wlan ;;
+off)
+    if ! present; then
+        /usr/lib/nibos/nib-net up
+        # The driver appears and systemd-rfkill puts the kept switch back on it; block after.
+        for _ in 1 2 3 4 5 6 7 8 9 10; do present && break; sleep 0.5; done
+        sleep 1
+    fi
+    exec rfkill block wlan ;;
 status)
     if [ "$(rfkill list wlan -n -o SOFT 2>/dev/null | head -1)" = blocked ]; then echo off
     elif [ -e /sys/class/net/wlan0 ]; then echo on
+    elif ! present && [ "$(kept)" = on ]; then echo on; echo "(starting: the driver loads once start-up has finished)"
     else echo "off (the network isn't up: nib net up)"; fi ;;
 *) echo "usage: nib wifi on|off|status" >&2; exit 2 ;;
 esac
