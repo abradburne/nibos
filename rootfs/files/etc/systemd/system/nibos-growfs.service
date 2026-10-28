@@ -1,14 +1,14 @@
-# nibos (rootfs/make-arch.sh): the image is small; grow the root file system
-# to fill its partition once, on the first boot.
+# nibos (rootfs/make-arch.sh): the image's root file system is small; grow it to fill its
+# partition. At every start, not once: an update writes the new slot with the image's small file
+# system too, and a "done" marker under /var/lib/nibos (which an update carries over) left every
+# updated system at the image's size, 1.3 GB of its partition unused, until it filled up.
+# systemd-growfs does nothing to a file system that already fills its partition.
 [Unit]
-Description=Grow the root file system to fill its partition (first boot)
-ConditionPathExists=!/var/lib/nibos/grown
+Description=Grow the root file system to fill its partition
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/systemd/systemd-growfs /
-ExecStart=/usr/bin/mkdir -p /var/lib/nibos
-ExecStart=/usr/bin/touch /var/lib/nibos/grown
 
 [Install]
 WantedBy=multi-user.target

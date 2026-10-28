@@ -53,7 +53,8 @@ bootloader, is in [docs/building.md](../docs/building.md).
 - Three small units of its own ([`files/`](files/)): `nibos-wifi-import` copies Wi-Fi networks from
   `ROMS/nibos/wifi/` into iwd at every start; `nibos-bootlog` leaves each start's kernel
   log and journal on `ROMS/nibos/log/` (the last 10); `nibos-growfs` grows the file system
-  to its partition once.
+  to its partition at every start (off DSlot's path; a no-op once it fills it), so the small
+  file system an update writes is grown too.
 - No fstab entry for the root (the kernel mounts it; an entry would add a device wait, fsck and
   growfs to every boot), and the console font is the kernel's Terminus 16x32.
 

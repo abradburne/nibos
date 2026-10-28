@@ -145,7 +145,7 @@ The board's details: [docs/engineering/input.md](engineering/input.md),
 | `/usr/lib/nibos/` | `board.conf`, `soc.conf`, the `nib-*` subcommands, the splash, the image's own scripts |
 | `/etc/nibos/` | Settings written on the device: the read-ahead list |
 | `/run/nibos/` | `backlight/top`, `backlight/bottom`: the screens' backlights by name, writable by the video group; `splash`: when the splash's picture went up (read by DSlot and `bench/boot-ui.sh`) |
-| `/var/lib/nibos/` | State: the screens' saved brightness, whether the root file system has been grown, the speaker amps' active tuning (`firmware/`); on an image, the state partition at `state/` |
+| `/var/lib/nibos/` | State: the screens' saved brightness, the speaker amps' active tuning (`firmware/`); on an image, the state partition at `state/` |
 | `ROMS/nibos/` | On the card's data partition (ROMS, or NIBOS-DATA on an image), readable from any computer: Wi-Fi networks, boot logs, stock bootloader copies |
 | Units | `nibos-input`, `nibos-audio` (user), `nibos-network.target`, `nibos-network-modules`, `nibos-network-deferred`, `nibos-backlight`, `nibos-cpufreq`, `nibos-late-modules`, `nibos-zram`, `nibos-growfs`, `nibos-wifi-import`, `nibos-bootlog`, `dslot` |
 

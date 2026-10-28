@@ -40,7 +40,7 @@ leaves the GPT in sectors 1-33 alone):
 | Sector 20480 | The fallback U-Boot (A held at power-on), built with p3 as its root | ≤ 2 MiB |
 | p1 `falcon` at sector 163840 (raw) | The Falcon FIT (TF-A, kernel, DTB, command line); room for slot B's and the boot control block ([ab-rollback.md](ab-rollback.md)) | 64 MiB |
 | p2 `NIBOS` (FAT32) | `README.txt`, `provision.toml.example`, `NOTICE`, `packages.txt`, `licenses/` | 128 MiB |
-| p3 `nibos-root-a` (ext4) | The root, with `/boot` (the fallback's `extlinux.conf`, kernel, DTB); grown to its partition on the first boot | 3 GiB |
+| p3 `nibos-root-a` (ext4) | The root, with `/boot` (the fallback's `extlinux.conf`, kernel, DTB); grown to its partition at every start (an update writes the image's small file system too) | 3 GiB |
 | p4 `nibos-root-b` | Empty, for A/B updates | 3 GiB |
 | p5 `nibos-state` (ext4) | What `provision.toml` sets: Wi-Fi networks, SSH keys, the data card, the time zone (and `nib clock zone`'s), the first boot's marker; mounted at `/var/lib/nibos/state` | 512 MiB |
 | p6 `NIBOS-DATA` (exFAT) | `Roms/`, `BIOS/`, `Saves/`, `APPS/` as DSlot expects, and `nibos/log/` (the boot logs); made on the first boot over the rest of the card, mounted at `/mnt/roms` | the rest |
@@ -110,7 +110,7 @@ leaves the GPT in sectors 1-33 alone):
    `/usr/lib/nibos/root-verify` 45 s after the start, at idle IO and CPU priority, never on the
    boot path. It checks every file the image shipped under `/usr` and `/boot` against
    `/usr/lib/nibos/root-files.sha256`, which `rootfs/make-arch.sh` writes last (the files, not
-   the partition: the root is mounted read-write and grown to its partition on the first boot,
+   the partition: the root is mounted read-write and grown to its partition at every start,
    so its bytes never match the image again). The verdict goes to p5 as `root-verified`, with
    the list's hash, so each root is read once (about a minute); a write of the image makes p5
    afresh, so the next write is checked again. Bad: a line in the journal,

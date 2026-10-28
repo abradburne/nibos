@@ -246,6 +246,9 @@ check "reading iwd without auto-start doesn't start it" 'inactive iwd.service &&
 # On a slot's trial boot the confirmation watches the boot UI for 30 s; as a oneshot that held the
 # start-up open, and the radios left on (which wait for the start-up) came back late after
 # every update. The container has no boot control block, so it checks the unit itself.
+# The root is grown at every start, not once: an update writes the image's small file system, and
+# a "done" mark under /var/lib/nibos (carried over by updates) left updated systems at 1.7 GB.
+check "the root is grown to its partition at every start, not once" '[ -L "$r/etc/systemd/system/multi-user.target.wants/nibos-growfs.service" ] && ! grep -q "^Condition" "$r/etc/systemd/system/nibos-growfs.service"'
 check "the boot confirmation doesn't hold the start-up open" '[ "$(sed -n "s/^Type=//p" "$r/usr/lib/systemd/system/nibos-boot-good.service")" = simple ] && ! grep -q "^ExecStartPost" "$r/usr/lib/systemd/system/nibos-boot-good.service"'
 check "system updates: nibOS's update key" 'grep -q "^untrusted comment: minisign public key 41B02B0D6ED49D26$" "$r/usr/lib/nibos/update.pub"'
 check "system updates: the release file, nibos-update, its boot step and keep list" 'grep -q "^NIBOS_VERSION=." "$r/usr/lib/nibos/release" && grep -q "^NIBOS_UPDATE_REPO=." "$r/usr/lib/nibos/release" && [ -x "$r/usr/bin/nibos-update" ] && [ -x "$r/usr/lib/nibos/nib-update" ] && [ -L "$r/etc/systemd/system/multi-user.target.wants/nibos-update-boot.service" ] && [ -s "$r/usr/lib/nibos/update-keep" ]'

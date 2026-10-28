@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **An updated system has its whole partition again.** An update writes the new system with the
+  image's small root file system (1.7 GB), and the step that grows it to fill its 3 GB partition
+  ran only on a card's first start: its "done" mark is carried over by updates, so every updated
+  device ran with 1.3 GB unused and, with PortMaster's ports in the home folder, could fill up
+  (DSlot's settings then can't be saved, nor anything installed). It now grows at every start
+  (`nibos-growfs`; a no-op taking 0.2 s once the file system fills its partition), so the first
+  start of an update gives the space back.
+
 ## 0.1.0-alpha6
 
 - **Which systems earn achievements**, on DSlot 0.4.1's Achievements page: DS, Game Boy and Game
