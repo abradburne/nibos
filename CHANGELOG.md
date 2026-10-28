@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Writing a new image keeps your settings.** It already kept NIBOS-DATA (games and saves), but
+  the settings live in the home folder, which a new image replaces: DSlot's and each emulator's
+  settings (a console's screen shape, say), play time and favourites went. nibOS now keeps a
+  copy of them in NIBOS-DATA's `nibos/settings/` (every 10 minutes, before sleep, at power-off)
+  and puts it back on the first start after an image is written, before DSlot. The
+  RetroAchievements sign-in isn't copied (the drive reads on any computer): sign in again.
+  Delete `nibos/settings/` on the drive to start with defaults.
 - **Wi-Fi left on comes back as soon as usual after an update.** On the first start of a new
   version the 30 s check that confirms it held the start-up open, and the radios, which wait for
   the start-up to finish, came back half a minute late, with DSlot's switch showing Wi-Fi off

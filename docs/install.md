@@ -27,8 +27,10 @@ Both give one of two setups:
    balenaEtcher 2.1.6 (on macOS) writes a `.img.xz` wrongly, and the card doesn't start;
    unpack it first and give it the `.img`. If the computer calls the card unreadable or
    offers to format it, say no (Ignore or Eject, never Initialise). Writing a newer image over a card that was set up by nibOS 0.1.0-alpha1 or later keeps its
-   NIBOS-DATA partition, games and saves included; a card set up by anything older is erased
-   once. Copying your saves off first is still wise.
+   NIBOS-DATA partition, games and saves included, and from 0.1.0-alpha6 your settings, play
+   time and favourites too (kept in NIBOS-DATA's `nibos/settings/`; sign in to
+   RetroAchievements again); a card set up by anything older is erased once. Copying your saves
+   off first is still wise.
 3. **Set it up.** On the card's `NIBOS` partition, copy `provision.toml.example` to
    `provision.toml` and fill in what you want: a Wi-Fi network, an SSH public key, a password
    (or none), the time zone. Every part is optional.

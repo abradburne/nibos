@@ -73,6 +73,15 @@ leaves the GPT in sectors 1-33 alone):
    before nibOS 0.1.0-alpha1 had the partition right after the state partition, where an image
    overwrites its start, and are erased once. `tools/test-image.sh IMAGE [OTHER]` checks this
    by writing the image (and the other edition's) over a card with a save on it.
+
+   The settings go with the card too, though they live in the home folder, on the root, which a
+   new image replaces: `settings-mirror` (image/files/) keeps a copy of `~/.config` and DSlot's
+   play time and favourites (`~/.local/share/dslot`) in NIBOS-DATA's `nibos/settings/`, brought
+   up to date every 10 minutes, before sleep and at power-off; on the first start after an image
+   is written (no `/var/lib/nibos/settings-restored`, which an update keeps) it puts them back
+   before DSlot starts, never over a file the new system already has. The RetroAchievements
+   token is left out (exFAT keeps no permissions, and the drive reads on any computer), so the
+   player signs in again. test-image checks the copy, the token's absence and the putting back.
 2. **`provision.toml`.** `nibos-provision` (at every boot, before the network, SSH and the
    console) reads `NIBOS/provision.toml` if it exists. It checks it strictly (unknown keys,
    empty or over-long values, newlines and NULs, Wi-Fi passphrase 8-63 bytes, SSH key types),

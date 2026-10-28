@@ -1,0 +1,20 @@
+# nibos (a downloadable image): the user's settings put back from NIBOS-DATA on the first start
+# after the image was written over a card that had them (settings-mirror). Once: the marker is
+# under /var/lib/nibos, which an update keeps and a new image doesn't. Before DSlot, so it starts
+# with them; on every other start the condition skips it without touching the drive.
+[Unit]
+Description=Put the settings back from NIBOS-DATA (a card written again)
+DefaultDependencies=no
+ConditionPathExists=!/var/lib/nibos/settings-restored
+After=systemd-remount-fs.service nibos-firstboot-data.service mnt-roms.automount
+Before=dslot.service nibos-safe-mode.service getty@tty1.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/nibos/settings-mirror restore
+ExecStartPost=/bin/sh -c 'mkdir -p /var/lib/nibos && touch /var/lib/nibos/settings-restored'
+TimeoutStartSec=30
+
+[Install]
+WantedBy=sysinit.target

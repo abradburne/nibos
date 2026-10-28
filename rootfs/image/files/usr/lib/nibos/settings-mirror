@@ -1,0 +1,75 @@
+#!/bin/sh
+# nibos-settings (a downloadable image; docs/design/images.md): a copy of the user's settings on
+# the card's NIBOS-DATA drive, so that writing a newer image over the card (which keeps
+# NIBOS-DATA but makes a new root, and with it a new home folder) keeps them too. An update
+# carries the home folder over by itself (update-keep); this is for the card written again.
+#
+#   settings-mirror save       the copy brought up to date: every 10 minutes
+#                              (nibos-settings-save.timer), before sleep, at power-off
+#   settings-mirror restore    the copy put back into a home that has none of it: once, on the
+#                              first start after the image was written, before DSlot
+#                              (nibos-settings-restore.service); a file already there is kept
+#
+# What is copied: ~/.config (DSlot's settings, each emulator's, nibOS's preferences) and DSlot's
+# play time and favourites (~/.local/share/dslot), to NIBOS-DATA's nibos/settings/config/ and
+# nibos/settings/dslot/, readable on a computer. Not copied: the RetroAchievements sign-in (a
+# token kept private in the home folder; the drive is exFAT, which keeps no permissions, and
+# can be read on any computer: sign in again after writing a new image) and PulseAudio's
+# machine files. Deleting nibos/settings/ on the drive makes the next new image start clean.
+# The user is uid 1000's. ROOT and HOME_DIR override the drive and the home (for testing).
+set -eu
+drive=${ROOT:-/mnt/roms}
+copy=$drive/nibos/settings
+user=$(getent passwd 1000 | cut -d: -f1)
+home=${HOME_DIR:-$(getent passwd 1000 | cut -d: -f6)}
+[ -n "$user" ] && [ -n "$home" ] || { echo "settings-mirror: no user 1000" >&2; exit 0; }
+
+# The copy's parts: the folder in the home, and its name under nibos/settings/.
+parts() {
+    echo ".config config"
+    echo ".local/share/dslot dslot"
+}
+
+case "${1:-}" in
+save)
+    # No drive (not mounted, no card): nothing to do, and never an error that holds up sleep.
+    [ -d "$drive" ] && mkdir -p "$copy" 2>/dev/null || exit 0
+    new=$copy.new
+    rm -rf "$new"
+    mkdir -p "$new"
+    parts | while read -r from to; do
+        [ -d "$home/$from" ] || continue
+        mkdir -p "$new/$to"
+        cp -R "$home/$from/." "$new/$to/"
+    done
+    rm -f "$new/config/dslot/retroachievements.token"
+    rm -rf "$new/config/pulse"
+    # In place of the old copy at once, so a power cut leaves one whole copy or the other.
+    rm -rf "$copy.old"
+    [ ! -d "$copy" ] || mv "$copy" "$copy.old"
+    mv "$new" "$copy"
+    rm -rf "$copy.old"
+    sync -f "$copy" 2>/dev/null || sync ;;
+restore)
+    [ -d "$copy" ] || { echo "settings-mirror: no settings on the drive to put back"; exit 0; }
+    # Made as the user, so what is made is theirs (a new home's own folders, ~/.config 0700,
+    # are left as they are).
+    as_user() { runuser -u "$user" -- "$@"; }
+    parts | while read -r from to; do
+        [ -d "$copy/$to" ] || continue
+        as_user mkdir -p "$home/$from"
+        for entry in "$copy/$to"/* "$copy/$to"/.[!.]*; do
+            [ -e "$entry" ] || continue
+            name=${entry##*/}
+            # -n: what the new system already has (provision.toml's, say) wins.
+            as_user cp -Rn "$entry" "$home/$from/"
+            # exFAT keeps no mode (every file reads as executable): a fresh home's modes.
+            find "$home/$from/$name" -type d -exec chmod 755 {} + 2>/dev/null || true
+            find "$home/$from/$name" -type f -exec chmod 644 {} + 2>/dev/null || true
+        done
+    done
+    echo "settings-mirror: settings put back from $copy" ;;
+*)
+    echo "usage: settings-mirror save|restore" >&2
+    exit 2 ;;
+esac

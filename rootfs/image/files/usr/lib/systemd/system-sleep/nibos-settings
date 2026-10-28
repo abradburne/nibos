@@ -1,0 +1,7 @@
+#!/bin/sh
+# nibos (a downloadable image): the settings copied to NIBOS-DATA before the device sleeps
+# (settings-mirror), since a sleep can end in a flat battery or a power-off. Never holds the
+# sleep up for long, and never stops it.
+[ "$1" = pre ] || exit 0
+timeout 5 /usr/lib/nibos/settings-mirror save >/dev/null 2>&1 || true
+exit 0

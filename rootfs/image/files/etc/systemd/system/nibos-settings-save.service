@@ -1,0 +1,11 @@
+# nibos (a downloadable image): the settings' copy on NIBOS-DATA brought up to date
+# (settings-mirror), by nibos-settings-save.timer.
+[Unit]
+Description=Copy the settings to NIBOS-DATA
+RequiresMountsFor=/mnt/roms
+
+[Service]
+Type=oneshot
+Nice=19
+IOSchedulingClass=idle
+ExecStart=/usr/lib/nibos/settings-mirror save

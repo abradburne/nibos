@@ -299,7 +299,8 @@ if [ "$for_image" = 1 ]; then
     # Written last: nothing below changes those trees (enabling units writes /etc).
     (cd "$root" && find usr boot -type f ! -path usr/lib/nibos/root-files.sha256 -print0 |
         LC_ALL=C sort -z | xargs -0 sha256sum) > "$root/usr/lib/nibos/root-files.sha256"
-    chroot "$root" systemctl enable nibos-provision nibos-firstboot-data nibos-root-verify.timer >/dev/null
+    chroot "$root" systemctl enable nibos-provision nibos-firstboot-data nibos-root-verify.timer \
+        nibos-settings-restore nibos-settings-save.timer nibos-settings-shutdown >/dev/null
 fi
 
 # Pack it. The image is small; the partition is grown on the device.

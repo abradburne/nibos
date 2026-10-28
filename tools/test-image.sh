@@ -255,8 +255,23 @@ for _ in $(seq 180); do grep -qs "^result=" "$s/root-verified" && break; sleep 1
 check "nibos-root-verify ran once after the start and found the root whole" '[ "$(systemctl -M "$machine" show -p Result --value nibos-root-verify.service)" = success ] && grep -qx "result=ok" "$s/root-verified"'
 check "the update step at boot ran and said where it stands" '[ "$(systemctl -M "$machine" show -p Result --value nibos-update-boot.service)" = success ] && in_machine cat /run/nibos/update/status.json | grep -q "\"phase\":\"idle\""'
 check "the radios' switches: nib bluetooth and the restore at boot" '[ -x "$r/usr/lib/nibos/nib-bluetooth" ] && [ -L "$r/etc/systemd/system/multi-user.target.wants/nibos-radios-restore.service" ]'
+# The settings' copy on NIBOS-DATA (settings-mirror): made at power-off, without the
+# RetroAchievements token; put back on the first start of a card written again (its home new,
+# the marker gone), the user's, before DSlot.
+u=$(awk -F: '$3 == 1000 { print $1 }' "$r/etc/passwd")
+h=$(awk -F: '$3 == 1000 { print $6 }' "$r/etc/passwd")
+check "the settings' copy: put back once already on the first start (nothing to put back)" '[ -e "$tmp/ov/var/lib/nibos/settings-restored" ]'
+systemd-run -M "$machine" --wait -q -p User="$u" sh -c 'mkdir -p ~/.config/dslot ~/.local/share/dslot &&
+    echo "[system]" > ~/.config/dslot/settings.toml && echo stats > ~/.local/share/dslot/stats.tsv &&
+    echo token > ~/.config/dslot/retroachievements.token'
 halt
 check "the logs on the card at power-off" 'grep -qs "^nibOS: .*(now)" "$tmp"/roms/nibos/log/boot-*.txt'
+m=$tmp/roms/nibos/settings
+check "the settings copied to NIBOS-DATA at power-off, the sign-in left out" '[ "$(cat "$m/config/dslot/settings.toml" 2>/dev/null)" = "[system]" ] && [ "$(cat "$m/dslot/stats.tsv" 2>/dev/null)" = stats ] && [ ! -e "$m/config/dslot/retroachievements.token" ]'
+rm -rf "$tmp/ov$h/.config/dslot" "$tmp/ov$h/.local/share/dslot" "$tmp/ov/var/lib/nibos/settings-restored"
+boot
+check "a card written again: the settings put back, the user's, before DSlot" '[ "$(cat "$tmp/ov$h/.config/dslot/settings.toml" 2>/dev/null)" = "[system]" ] && [ "$(cat "$tmp/ov$h/.local/share/dslot/stats.tsv" 2>/dev/null)" = stats ] && [ "$(stat -c %u "$tmp/ov$h/.config/dslot/settings.toml")" = 1000 ] && [ -e "$tmp/ov/var/lib/nibos/settings-restored" ] && [ "$(systemctl -M "$machine" show -p Result --value nibos-settings-restore.service)" = success ]'
+halt
 # A radio left on (what systemd-rfkill saves for an unblocked radio) brings the network up at
 # the next boot; left off, it doesn't. The radios' own state is systemd-rfkill's to put back.
 rf=$tmp/ov/var/lib/systemd/rfkill   # written through the overlay, as the device would

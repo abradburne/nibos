@@ -1,0 +1,12 @@
+# nibos (a downloadable image): the settings copied to NIBOS-DATA every 10 minutes, so a flat
+# battery loses at most that much; sleep and power-off copy them too (system-sleep hook,
+# nibos-settings-shutdown.service).
+[Unit]
+Description=Copy the settings to NIBOS-DATA every 10 minutes
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

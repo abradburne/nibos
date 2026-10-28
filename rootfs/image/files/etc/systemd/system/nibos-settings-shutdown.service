@@ -1,0 +1,16 @@
+# nibos (a downloadable image): the settings copied to NIBOS-DATA at power-off and restart
+# (settings-mirror), after DSlot has written its own.
+[Unit]
+Description=Copy the settings to NIBOS-DATA at power-off
+RequiresMountsFor=/mnt/roms
+After=dslot.service nibos-safe-mode.service getty@tty1.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/usr/lib/nibos/settings-mirror save
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
