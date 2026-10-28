@@ -243,6 +243,10 @@ in_machine busctl --system --auto-start=no call net.connman.iwd / \
     org.freedesktop.DBus.ObjectManager GetManagedObjects >/dev/null 2>&1 || true
 sleep 1
 check "reading iwd without auto-start doesn't start it" 'inactive iwd.service && inactive nibos-network-modules.service'
+# On a slot's trial boot the confirmation watches the boot UI for 30 s; as a oneshot that held the
+# start-up open, and the radios left on (which wait for the start-up) came back late after
+# every update. The container has no boot control block, so it checks the unit itself.
+check "the boot confirmation doesn't hold the start-up open" '[ "$(sed -n "s/^Type=//p" "$r/usr/lib/systemd/system/nibos-boot-good.service")" = simple ] && ! grep -q "^ExecStartPost" "$r/usr/lib/systemd/system/nibos-boot-good.service"'
 check "system updates: nibOS's update key" 'grep -q "^untrusted comment: minisign public key 41B02B0D6ED49D26$" "$r/usr/lib/nibos/update.pub"'
 check "system updates: the release file, nibos-update, its boot step and keep list" 'grep -q "^NIBOS_VERSION=." "$r/usr/lib/nibos/release" && grep -q "^NIBOS_UPDATE_REPO=." "$r/usr/lib/nibos/release" && [ -x "$r/usr/bin/nibos-update" ] && [ -x "$r/usr/lib/nibos/nib-update" ] && [ -L "$r/etc/systemd/system/multi-user.target.wants/nibos-update-boot.service" ] && [ -s "$r/usr/lib/nibos/update-keep" ]'
 # The timer fires at once in a container (OnBootSec counts from the host's start); the check

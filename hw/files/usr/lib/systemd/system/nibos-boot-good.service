@@ -8,10 +8,13 @@ Description=Confirm the running slot once the boot UI is up
 After=multi-user.target
 
 [Service]
-Type=oneshot
-ExecStart=/usr/bin/nibos-bootctl confirm-when-up
-# An update tried on this slot is done once it is confirmed (nibos-update).
-ExecStartPost=-/usr/bin/nibos-update booted
+# Simple, not oneshot: on a slot's trial boot the 30 s watch would hold the start-up open
+# (is-system-running "starting"), and with it what waits for the start-up to finish: the
+# radios left on came back half a minute late after every update (nibos-radios-restore), and
+# DSlot showed Wi-Fi off meanwhile. An update tried on this slot is done once it is confirmed
+# (nibos-update booted), as when it was this unit's ExecStartPost.
+Type=simple
+ExecStart=/bin/sh -c '/usr/bin/nibos-bootctl confirm-when-up && { /usr/bin/nibos-update booted || true; }'
 
 [Install]
 WantedBy=multi-user.target

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Wi-Fi left on comes back as soon as usual after an update.** On the first start of a new
+  version the 30 s check that confirms it held the start-up open, and the radios, which wait for
+  the start-up to finish, came back half a minute late, with DSlot's switch showing Wi-Fi off
+  meanwhile; the check no longer holds it (`nibos-boot-good` is a simple unit, like the bootlog's).
+
 ## 0.1.0-alpha5
 
 - **RetroAchievements.** DSlot 0.4.0 signs in from the menu's new **Achievements** page (the
