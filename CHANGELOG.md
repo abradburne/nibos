@@ -1,7 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha5
 
+- **RetroAchievements.** DSlot 0.4.0 signs in from the menu's new **Achievements** page (the
+  password is typed once and never kept; DSlot keeps the token the service answers with) and
+  shows each DS, GBA, GB and GBC game's set on the shelf: how many are earned, the points, a bar,
+  and the full list with badges from the Game page. DSperate (DS) and inkdot (GB, GBC) earn them
+  while you play, signed in through DSlot: a notice with the badge when one unlocks, the
+  achievement in progress and any challenge under way in the bottom-left corner, progress kept
+  in save states and the resume point, and unlocks earned offline sent at the next start.
+  Achievements are Casual (softcore) for now; Hardcore stays off until RetroAchievements approves
+  our emulators.
+- **Notices look the same everywhere.** DSperate's and inkdot's notices are nibkit's (0.1.4),
+  drawn as DSlot draws its own, one after another rather than over each other.
+- **DSperate no longer dies starting a game with a big achievement set.** Signed in, a game whose
+  set is large (Bubble Bobble Double Shot's is 446 KB) was killed by the RT watchdog a second in:
+  the set was read on the emulation thread as a real-time task. It is read as an ordinary one now.
 - **Any card in TF2 is read.** The games card had to be exFAT and named `DS`; one named anything
   else was silently ignored. nibOS now mounts whatever card is in the TF2 slot, exFAT or FAT32,
   whatever its name (a udev rule matches the slot, `mmcblk1`, and links its volume to

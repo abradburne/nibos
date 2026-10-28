@@ -106,7 +106,7 @@ case "$SSH_KEY" in *.pub) SSH_KEY=${SSH_KEY%.pub} ;; esac
 # nibkit, the SDK library nibOS's programs and the emulators build on: its repository and the
 # tag they use (tools/make-image.sh fetches it for the packages built from other repositories).
 : "${NIBKIT_REPO:=https://github.com/abradburne/nibkit}"
-: "${NIBKIT_TAG:=v0.1.1}"
+: "${NIBKIT_TAG:=v0.1.4}"
 
 # System updates (docs/design/updates.md): the repository whose GitHub releases images update
 # from, and the channel they follow (stable, or beta for pre-releases too).
