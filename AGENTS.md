@@ -16,7 +16,7 @@ which runs on the device as it is.
 | Touch | Bottom panel only: `Goodix Capacitive TouchScreen`. SDL finger events arrive normalized 0–1 over the bottom window |
 | Controls | Face buttons, D-pad, L/R, L2/R2, Select, Start, Menu, one analog stick, volume up/down, Back, power, lid |
 | Sound | Speakers (two AW88166 amps) and a headphone jack (RK817), switched automatically |
-| Storage | Two microSD slots. `/mnt/roms`: the card's ROMS partition (FAT, automounted, owned by the login user). `/mnt/ds`: the second card (exFAT, label `DS`, automounted). The root file system is ext4 on the first card |
+| Storage | Two microSD slots. `/mnt/roms`: the card's ROMS partition (FAT, automounted, owned by the login user). `/mnt/ds`: the card in TF2 (exFAT or FAT, any name, mounted by udev when it appears). The root file system is ext4 on the first card |
 | Battery | `rk817-battery`, 4247 mAh design; `rk817-charger` |
 | Software | Arch Linux ARM, systemd 262, SDL3 3.4.18 with sdl2-compat 2.32.74, PipeWire 1.6.9, Rust 1.99 in the build machine |
 

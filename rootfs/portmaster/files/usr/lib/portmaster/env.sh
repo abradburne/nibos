@@ -13,11 +13,10 @@ export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 export controlfolder="$XDG_DATA_HOME/PortMaster"
 
 ## Ports go in Roms/PORTS on the games card when it is in, else on the ROMS partition.
-## NIBOS_PORTS_DIR set beforehand wins. The card is asked for by its label: /mnt/ds is an
-## automount, and looking into it without the card waits for it (up to 5 s) before anything
-## is on the screens.
+## NIBOS_PORTS_DIR set beforehand wins. The card in TF2 is in when /mnt/ds is mounted (udev
+## mounts it when the card appears, whatever its name).
 if [ -z "${NIBOS_PORTS_DIR:-}" ]; then
-  if [ -e /dev/disk/by-label/DS ]; then
+  if mountpoint -q /mnt/ds; then
     NIBOS_PORTS_DIR=/mnt/ds/Roms/PORTS
   else
     NIBOS_PORTS_DIR=/mnt/roms/Roms/PORTS

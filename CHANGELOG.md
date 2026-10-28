@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Any card in TF2 is read.** The games card had to be exFAT and named `DS`; one named anything
+  else was silently ignored. nibOS now mounts whatever card is in the TF2 slot, exFAT or FAT32,
+  whatever its name (a udev rule matches the slot, `mmcblk1`, and links its volume to
+  `/dev/nibos-games-card` for fstab; on a card with several volumes one named `DS` still wins).
+  FAT file names are UTF-8 by default (`CONFIG_FAT_DEFAULT_UTF8`), so a FAT32 card's Japanese
+  titles read right. PortMaster puts ports on the TF2 card whenever it is mounted.
 - **Asleep too long on battery, the device powers off.** Deep sleep, already the deepest state
   this kernel offers with the memory kept, still draws about 49 mA on the RG DS+ (s2idle 123 mA):
   a full battery in 3.6 days. When it sleeps on battery, a sleep hook now sets the RTC's alarm

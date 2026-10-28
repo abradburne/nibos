@@ -101,7 +101,7 @@ the RG DS+:
 | Partition 11, "ROMS" (FAT) | Games, saves, and `ROMS/nibos/`: Wi-Fi networks to import, boot logs, copies of the stock bootloader and partitions | you, and the scripts that keep copies |
 | Partition 12, "archroot" (ext4) | The root file system; grows to fill the card on first boot | `rootfs/install-arch.sh` |
 
-The second slot, TF2, is for games (exFAT, mounted at `/mnt/ds`).
+The second slot, TF2, is for games (exFAT or FAT, any name, mounted at `/mnt/ds`).
 
 ## The hardware layer
 

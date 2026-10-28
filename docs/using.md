@@ -97,8 +97,8 @@ rootfs/splash/boot.sh on|off|status  # the logo at 1.5 s (from the Mac, on a dev
 
 Leaving DSlot (Select + Start), or DSlot failing, starts the shell on tty1 either way. DSlot
 lists `Roms/NDS`, `Roms/GBA`, `Roms/GB`, `Roms/GBC` and the other systems' folders on the data
-partition (ROMS on a development card, NIBOS-DATA on an image) and on a card in TF2 (exFAT,
-label `DS`). Saves and save states are kept per game in `Saves/<SYSTEM>/<ROM name>/` there.
+partition (ROMS on a development card, NIBOS-DATA on an image) and on a card in TF2 (exFAT or
+FAT32, any name). Saves and save states are kept per game in `Saves/<SYSTEM>/<ROM name>/` there.
 
 Games are started by a launcher and emulators that are separate projects, installed as their
 own packages; their controls and settings are theirs ([rootfs/dslot/README.md](../rootfs/dslot/README.md#games)).

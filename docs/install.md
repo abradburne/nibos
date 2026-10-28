@@ -46,7 +46,7 @@ Then:
 - **Logging in.** The user is `nibos`. Without a password, tty1 logs in by itself; SSH is on
   only once `provision.toml` gave a key: `ssh nibos@nibos.local`.
 - **Games** go on NIBOS-DATA in `Roms/NDS`, `Roms/GBA`, `Roms/GB`, `Roms/GBC` and the other
-  systems' folders (or on a second card in TF2, exFAT labelled `DS`).
+  systems' folders (or on a second card in TF2, exFAT or FAT32).
 - **Wi-Fi and Bluetooth** start off on a fresh card unless `provision.toml` named a network:
   DSlot's switches, `nib wifi on` or `nib bluetooth on` turn them on, and the choice is kept.
 - **The speakers** use nibOS's own tuning for the amps. `sudo nib audio import-tuning` imports
@@ -219,7 +219,7 @@ ssh $DEVICE 'sudo pacman -U /tmp/dsperate-*.pkg.tar.* /tmp/inkdot-*.pkg.tar.*'
 
 *Check:* `ssh $DEVICE ls /usr/share/dslot/emulators/` lists `dsperate.toml` and `inkdot.toml`.
 Put games on the card's ROMS volume in `Roms/NDS`, `Roms/GBA`, `Roms/GB`, `Roms/GBC` (or on a
-second card in TF2, exFAT labelled `DS`); DSlot shows them, and A starts one.
+second card in TF2, exFAT or FAT32); DSlot shows them, and A starts one.
 
 #### B4. The splash and read-ahead
 

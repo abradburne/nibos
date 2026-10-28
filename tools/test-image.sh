@@ -63,6 +63,7 @@ check "nibos-provision on" '[ -L "$r/etc/systemd/system/sysinit.target.wants/nib
 check "nibos-firstboot-data on" '[ -L "$r/etc/systemd/system/local-fs.target.wants/nibos-firstboot-data.service" ]'
 check "the provision program" '[ -x "$r/usr/bin/nibos-provision" ]'
 check "fstab: state and data" 'grep -q "PARTLABEL=nibos-state" "$r/etc/fstab" && grep -q "LABEL=NIBOS-DATA" "$r/etc/fstab"'
+check "the TF2 card is mounted by its slot, whatever its name" 'grep -q "^/dev/nibos-games-card  */mnt/ds  *auto " "$r/etc/fstab" && grep -q "mmcblk1" "$r/etc/udev/rules.d/70-nibos-games-card.rules" && ! grep -q "LABEL=DS" "$r/etc/fstab"'
 check "iwd keeps networks on the state partition" '[ "$(readlink "$r/var/lib/iwd")" = /var/lib/nibos/state/iwd ]'
 check "iwd's state directory isn't the symlink (systemd refuses one)" 'grep -qx "StateDirectory=" "$r/etc/systemd/system/iwd.service.d/50-nibos-state.conf"'
 check "Wi-Fi and Bluetooth off on a fresh card until switched on" '[ -x "$r/usr/lib/nibos/radios-first-off" ] && grep -q "nibos-radios-first-off.service" "$r/etc/udev/rules.d/73-nibos-radios-first-off.rules" && [ -s "$r/etc/systemd/system/nibos-radios-first-off.service" ]'

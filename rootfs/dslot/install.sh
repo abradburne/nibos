@@ -7,9 +7,9 @@
 #
 #   rootfs/dslot/install.sh [user@host]
 #
-# Installs sdl2-compat (SDL2 on SDL3) on the device if it is missing. The TF2 card goes to
-# /mnt/ds through the kernel's exFAT driver (exfatprogs replaces fuse-exfat's exfat-utils, whose
-# mount helper would take over `mount -t exfat`). Emulators are separate packages, which put
+# Installs sdl2-compat (SDL2 on SDL3) on the device if it is missing. The TF2 card, exFAT or FAT
+# and named anything, goes to /mnt/ds through the kernel's drivers (exfatprogs replaces
+# fuse-exfat's exfat-utils, whose mount helper would take over `mount -t exfat`). Emulators are separate packages, which put
 # their descriptions in /usr/share/dslot/emulators/ (DSlot's docs/emulators.md). Leaves the boot
 # switch as it is: `ssh DEVICE sudo nib boot-ui on` to start DSlot at power-on. Needs nibos-hw on
 # the device (it brings the `nib` command).
@@ -51,16 +51,16 @@ sudo install -Dm644 /tmp/50-dslot-power.rules /etc/polkit-1/rules.d/50-dslot-pow
 sudo install -Dm755 /tmp/nib-boot-ui /usr/lib/nibos/nib-boot-ui
 sudo install -Dm644 /tmp/nibos-rcu.conf /etc/tmpfiles.d/nibos-rcu.conf
 sudo systemd-tmpfiles --create /etc/tmpfiles.d/nibos-rcu.conf
-# The TF2 card: kernel exFAT, mounted by udev when the card appears (not an automount, whose
-# device timeout every access would wait out with no card in). An automount entry from before
-# is replaced.
+# The TF2 card: exFAT or FAT, any name, mounted by udev when the card appears (not an automount,
+# whose device timeout every access would wait out with no card in). An entry from before (an
+# automount, or the card by its label DS) is replaced.
 [ ! -e /usr/bin/mount.exfat-fuse ] || sudo pacman -Rdd --noconfirm exfat-utils >/dev/null
 sudo pacman -S --noconfirm --needed exfatprogs >/dev/null
 sudo install -d /mnt/ds
 sudo install -Dm644 /tmp/70-nibos-games-card.rules /etc/udev/rules.d/70-nibos-games-card.rules
-if ! grep -q "^LABEL=DS .*noauto,x-systemd.device-bound" /etc/fstab; then
-    sudo sed -i '/^LABEL=DS /d' /etc/fstab
-    echo "LABEL=DS    /mnt/ds    exfat rw,noatime,nofail,noauto,x-systemd.device-bound,uid=$UID_,gid=$UID_,fmask=0022,dmask=0022  0 0" |
+if ! grep -q "^/dev/nibos-games-card .*noauto,x-systemd.device-bound" /etc/fstab; then
+    sudo sed -i '/^LABEL=DS /d; /^\/dev\/nibos-games-card /d' /etc/fstab
+    echo "/dev/nibos-games-card  /mnt/ds  auto  rw,noatime,nofail,noauto,x-systemd.device-bound,uid=$UID_,gid=$UID_,fmask=0022,dmask=0022  0 0" |
         sudo tee -a /etc/fstab >/dev/null
     sudo systemctl stop mnt-ds.automount 2>/dev/null || true
 fi
