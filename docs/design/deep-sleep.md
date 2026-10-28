@@ -101,6 +101,10 @@ away either way.
 
 ## Tested
 
+- With the lid closed, on battery, `nib sleep off-after 1`, 2026-10-29: the alarm woke the
+  device a minute later, the hook's service took the inhibitor, logind accepted the power-off
+  at the first asking, in the same second as the wake, and the device shut down cleanly
+  (DSlot's resume state, the settings copy and the logs saved). The power key started it again.
 - Dry run on the dev card: `nib sleep off-after 2`, `/run/nibos/sleep-off-dry-run`, `systemctl
   suspend`: the device woke 2 minutes later on its own and the journal has
   `nibos-sleep-off: dry run: asleep the set time on battery, would power off`.

@@ -7,8 +7,13 @@
 #       /run/nibos/sleep-off-alarm.
 # post: if the recorded alarm is what woke the device (the RTC has reached it and the kernel has
 #       cleared it: an alarm that fired reads empty, one that didn't still shows its time) and
-#       the charger is still out, power off, 2 s from now through a transient timer, so the
-#       suspend's own job is over first. Otherwise clear our alarm so it can't fire later.
+#       the charger is still out, power off through a transient service: it first takes a
+#       block inhibitor on sleep and the lid switch, then asks for the power-off until logind
+#       accepts it. Both matter with the lid closed: logind refuses a power-off while the suspend
+#       that woke is still finishing ("Action suspend already in progress"), and a moment later
+#       it handles the still-closed lid by suspending again, so a power-off on a fixed delay lost
+#       that race every hour all night (2026-10-28). Otherwise clear our alarm so it can't fire
+#       later.
 #       With /run/nibos/sleep-off-dry-run present it only logs what it would do.
 #
 # Called by systemd-sleep with $1 = pre|post. Always exits 0: a failing hook must not stop the
@@ -51,8 +56,13 @@ post)
             echo "nibos-sleep-off: dry run: asleep the set time on battery, would power off"
         else
             echo "nibos-sleep-off: asleep the set time on battery: powering off"
-            systemd-run --no-block --quiet --collect --on-active=2 --unit=nibos-sleep-off \
-                systemctl poweroff
+            # The inhibitor is held from the moment the service starts, before logind's lid
+            # handling comes round again; poweroff is retried while the suspend is finishing.
+            # shellcheck disable=SC2016 # expanded by the service's own shell
+            systemd-run --no-block --quiet --collect --unit=nibos-sleep-off \
+                systemd-inhibit --what=sleep:handle-lid-switch --mode=block \
+                --who=nibos-sleep-off --why="powering off after sleeping too long" \
+                sh -c 'for i in $(seq 60); do systemctl poweroff && exit 0; sleep 0.5; done; exit 1'
         fi
     else
         # Woken early (or plugged in): our alarm must not fire later.
