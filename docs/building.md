@@ -143,9 +143,10 @@ bootloader's own stages, with the reference results.
 builds the kernel, U-Boot, nibos-hw and the root and lays them out as
 `out/nibos-<version>-rgds[-dslot].img.xz`, with nothing from the stock firmware in it.
 `tools/test-image.sh` checks an image without a device. The DSlot edition builds DSlot and the
-emulators from their checkouts beside this repository, with
-[nibkit](https://github.com/abradburne/nibkit) fetched at `NIBKIT_TAG` (`NIBKIT_REPO`,
-`config.sh`); nibOS's own crates take nibkit by the same git tag. What an image contains and
+emulators from their checkouts beside this repository. DSlot, inkdot and nibcase take
+[nibkit](https://github.com/abradburne/nibkit) at the tags their Cargo.lock pins; DSperate's
+pause menu and inktick take it at `NIBKIT_TAG` (`NIBKIT_REPO`, `config.sh`), as do nibOS's own
+crates. What an image contains and
 how it sets itself up: [design/images.md](design/images.md).
 
 ## Dead ends: don't repeat

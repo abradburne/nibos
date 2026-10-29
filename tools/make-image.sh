@@ -105,9 +105,10 @@ NIBOS_CHANNEL=$NIBOS_UPDATE_CHANNEL
 NIBOS_UPDATE_REPO=$NIBOS_UPDATE_REPO
 EOF
 
-# nibkit (NIBKIT_REPO at NIBKIT_TAG), for its licences and for the packages built from other
-# repositories, laid out the way their PKGBUILDs look for it (NIBKIT=, _nibkit=): nibkit with a
-# LICENSE, and nibkit-menu-c beside it, each standing alone.
+# nibkit (NIBKIT_REPO at NIBKIT_TAG), for its licences and for DSperate's pause menu and inktick,
+# laid out the way their PKGBUILDs look for it (_nibkit=, NIBKIT=): nibkit with a LICENSE, and
+# nibkit-menu-c beside it, each standing alone. DSlot, inkdot and nibcase take nibkit and
+# nib-cheevos at the tags their Cargo.lock pins.
 nibkit=$work/nibkit
 rm -rf "$nibkit"
 git -c advice.detachedHead=false clone -q --depth 1 --branch "$NIBKIT_TAG" "$NIBKIT_REPO" "$nibkit/repo"
@@ -143,10 +144,10 @@ if [ "$edition" = dslot ]; then
     # set -e: a package that fails to build stops the image, rather than leaving it out.
     in_vm bash -c "set -e; rm -rf \$HOME/nibos-image-build && mkdir -p \$HOME/nibos-image-build/src
         pacman -Q sdl2-compat >/dev/null 2>&1 || sudo pacman -S --noconfirm sdl2-compat
-        cd '$DSLOT_SRC/packaging/nibos' && NIBKIT='$nibkit/nibkit' $mk
+        cd '$DSLOT_SRC/packaging/nibos' && $mk
         cd '$dsperate/packaging/arch' && _src='$dsperate' _nibkit='$nibkit/nibkit-menu-c' $mk
-        cd '$inkdot/packaging/nibos' && NIBKIT='$nibkit/nibkit' $mk
-        cd '$nibcase/packaging/nibos' && NIBKIT='$nibkit/nibkit' $mk
+        cd '$inkdot/packaging/nibos' && $mk
+        cd '$nibcase/packaging/nibos' && $mk
         for c in beetle-ngp beetle-wswan gearsystem gw handy pcsx-rearmed; do (cd '$nibcase/packaging/cores/'\$c && $mk); done
         cd '$inktick/packaging/nibos' && NIBKIT='$nibkit/nibkit' $mk
         cd '$NIBOS_ROOT/rootfs/portmaster' && $mk
