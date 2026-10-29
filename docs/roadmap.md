@@ -93,6 +93,16 @@ this is the USB-C port, and that a computer enumerates it.
   the device tree, if TF-A takes `CPU_SUSPEND`, measured against the idle draw
   ([idle-power.md](engineering/idle-power.md)).
 - **Low-battery warning and safe shutdown** before the battery cuts out.
+- **Hibernation** (suspend to disk), in place of the power-off after `nib sleep off-after`:
+  asleep that long, the device writes its memory to the card and turns off, drawing nothing,
+  and comes back exactly where it was, outside a game too. Deep sleep has nothing lower on this
+  loader (PLLs and oscillator off need the vendor's resume path:
+  [design/deep-sleep.md](design/deep-sleep.md)). Needs `CONFIG_HIBERNATION`, a swap area on
+  the card, a `resume=` that waits for the SD card without an initramfs, and freeze/restore in
+  Panfrost, the panels, rtw88 and the RK817. Done when: closed on battery past the set time, the
+  device hibernates; the power key brings back the shelf or the game as it was, with the resume
+  time measured against a cold boot to the shelf (~6 s); and a failed resume boots normally.
+  The setting would then offer power off or hibernate.
 - **Power profiles**: a policy service for CPU/GPU performance against battery, which a game can
   ask for and the system can refuse; a thermal policy that tells programs why they're slower.
 
