@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **`nib update` says what the updater is doing at every step**: checking, finishing a download
+  (its boot files and your settings) and restarting each have their own line, and "up to date"
+  means just that.
+
 ## 0.1.0-beta1
 
 The first beta: nibOS 0.1.0's features are in, and the betas up to 0.1.0 bring fixes.

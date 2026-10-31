@@ -656,26 +656,37 @@ fn show() {
             s("version")
         );
     }
+    println!("{}", phase_line(&v));
+    if !s("notes").is_empty() && !s("available").is_empty() {
+        println!("\n{}", s("notes"));
+    }
+}
+
+/// `show`'s second line: what the updater is doing, one line for every phase `status` writes.
+/// A phase without one is named as it is, never taken for "up to date".
+fn phase_line(v: &serde_json::Value) -> String {
+    let s = |k: &str| v[k].as_str().unwrap_or("").to_owned();
     let available = s("available");
     match s("phase").as_str() {
-        "downloading" => println!(
+        "checking" => "checking for an update".into(),
+        "downloading" => format!(
             "downloading {available}: {} of {} parts",
             v["done"], v["total"]
         ),
-        "paused" => println!(
+        "paused" => format!(
             "downloading {available}: paused at {} of {} parts",
             v["done"], v["total"]
         ),
-        "ready" => println!("{available} is ready: nib update apply restarts into it"),
-        "available" => println!("{available} is available: nib update download"),
-        "trying" => println!("trying the new version until it is confirmed"),
-        "error" => println!("the last attempt failed: {}", s("detail")),
-        "current" => println!("{}", s("detail")),
-        "" => println!("no update checked yet: nib update check"),
-        _ => println!("up to date"),
-    }
-    if !s("notes").is_empty() && !available.is_empty() {
-        println!("\n{}", s("notes"));
+        "finishing" => format!("finishing {available}: its boot files and your settings"),
+        "ready" => format!("{available} is ready: nib update apply restarts into it"),
+        "available" => format!("{available} is available: nib update download"),
+        "restarting" => format!("restarting: {}", s("detail")),
+        "trying" => "trying the new version until it is confirmed".into(),
+        "error" => format!("the last attempt failed: {}", s("detail")),
+        "current" => s("detail"),
+        "idle" => "up to date".into(),
+        "" => "no update checked yet: nib update check".into(),
+        other => format!("updater: {other}"),
     }
 }
 
@@ -719,5 +730,57 @@ fn main() {
             eprintln!("usage: nibos-update check|download|apply|rollback|booted|ack|channel-stable|channel-beta|show");
             exit(2);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::phase_line;
+    use serde_json::json;
+
+    /// Every phase `status` writes (the `status(...)` calls above, and `booted`'s).
+    const PHASES: [&str; 11] = [
+        "checking",
+        "current",
+        "available",
+        "downloading",
+        "paused",
+        "finishing",
+        "ready",
+        "restarting",
+        "trying",
+        "error",
+        "idle",
+    ];
+
+    #[test]
+    fn only_idle_reads_up_to_date() {
+        for p in PHASES {
+            let line = phase_line(&json!({"phase": p, "available": "0.1.0-beta2", "detail": "x"}));
+            assert_eq!(line == "up to date", p == "idle", "{p}: {line}");
+        }
+    }
+
+    #[test]
+    fn finishing_names_the_release() {
+        let v = json!({"phase": "finishing", "available": "0.1.0-beta2"});
+        assert_eq!(
+            phase_line(&v),
+            "finishing 0.1.0-beta2: its boot files and your settings"
+        );
+    }
+
+    #[test]
+    fn restarting_says_where() {
+        let v = json!({"phase": "restarting", "detail": "back to the previous version"});
+        assert_eq!(phase_line(&v), "restarting: back to the previous version");
+    }
+
+    #[test]
+    fn an_unknown_phase_is_named() {
+        assert_eq!(
+            phase_line(&json!({"phase": "verifying"})),
+            "updater: verifying"
+        );
     }
 }
