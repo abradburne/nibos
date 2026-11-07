@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **The card images are named for what they are**: `nibos-<version>-rg-ds-plus.img.xz` for
+  nibOS, offered on https://nibos.alanb.dev, and `dslot-<version>-rg-ds-plus.img.xz` for DSlot's
+  image, offered on its own site, https://dslot.alanb.dev. The update files keep their names, so
+  every device already installed finds its updates as before.
 - **`nib update` says what the updater is doing at every step**: checking, finishing a download
   (its boot files and your settings) and restarting each have their own line, and "up to date"
   means just that.

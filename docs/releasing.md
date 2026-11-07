@@ -57,7 +57,9 @@ Kernel and U-Boot are not rebuilt here: a release that changes them is built onc
    ```
 
    The alphas are all on the `stable` channel. It writes `out/release-<version>/`: for each
-   edition the `.img.xz`, `.manifest.json`, `.minisig` and `.slot`, then `SHA256SUMS`.
+   edition the `.img.xz`, `.manifest.json`, `.minisig` and `.slot`, then `SHA256SUMS`. The card
+   images are `nibos-<version>-rg-ds-plus.img.xz` and `dslot-<version>-rg-ds-plus.img.xz`; the
+   update files keep `nibos-<version>-rgds[-dslot].*`, which installed devices look for.
 3. Push this tree and the tag (`git push origin main v<version>`), and the project trees.
 4. The GitHub release, named `nibOS <version>`, not a prerelease:
 
@@ -78,10 +80,12 @@ Kernel and U-Boot are not rebuilt here: a release that changes them is built onc
    line is the status; the notes follow it, so never search the whole output for a word. After
    the restart: the new version in `/usr/lib/nibos/release`, `nibos-boot-good` confirmed, the
    root check clean, and whatever the release changed.
-2. The site (`nibos-site-public`): the release block in `zola.toml` (version, tag, date,
-   commit, each image's size and sha256 from `SHA256SUMS`), `content/download.md` (which
-   alpha, which releases it updates from, the release notes), and any manual page the release
-   changes. Push, and check the live page.
+2. The sites, both: `nibos-site-public` (https://nibos.alanb.dev, nibOS's image) and
+   `dslot-site-public` (https://dslot.alanb.dev, DSlot's image). In each, the release block in
+   `zola.toml` (version, tag, date, commit, the image's file name, size and sha256 from
+   `SHA256SUMS`), `content/download.md` (which releases it updates from, the release notes:
+   nibOS's changes on one, DSlot's and the emulators' on the other), and any manual page the
+   release changes. Push both, and check both live pages.
 
 ## What not to do
 
