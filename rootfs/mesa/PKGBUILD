@@ -5,7 +5,7 @@ pkgbase=mesa-nibos
 pkgname=(mesa-nibos vulkan-panfrost-nibos)
 pkgver=26.2.4
 _pkgver=${pkgver/[a-z]/-&}
-pkgrel=2
+pkgrel=3
 epoch=1
 pkgdesc="Mesa OpenGL/GLES/EGL/GBM for nibOS: Panfrost only, no LLVM"
 url="https://www.mesa3d.org/"
@@ -53,11 +53,16 @@ makedepends=(
   xorgproto
 )
 options=(!lto)
-source=("https://archive.mesa3d.org/mesa-$_pkgver.tar.xz")
-sha256sums=('bce5f7fbebb934373b86c999a064d52fb5065878dc57f287f95346648ec832e9')
+source=("https://archive.mesa3d.org/mesa-$_pkgver.tar.xz"
+        0001-panfrost-copy-indices-before-scanning-them.patch)
+sha256sums=('bce5f7fbebb934373b86c999a064d52fb5065878dc57f287f95346648ec832e9'
+            '306eae2a8d71e460de142c4f6e07590e2864d0f0eb342c65791f56fef2a15893')
 
 prepare() {
   cd mesa-$_pkgver
+  # Index bounds read from a cached copy, not one index at a time from the write-combined
+  # mapping (README.md).
+  patch -Np1 -i "$srcdir/0001-panfrost-copy-indices-before-scanning-them.patch"
   # Same scheme as Arch ("-arch1.1"), marked as ours.
   echo "$_pkgver-nibos$epoch.$pkgrel" >VERSION
 }

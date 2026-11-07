@@ -1,0 +1,62 @@
+--- a/src/gallium/drivers/panfrost/pan_helpers.c	2026-10-01 23:39:53.000000000 +0900
++++ b/src/gallium/drivers/panfrost/pan_helpers.c	2026-11-07 15:52:43.935023861 +0900
+@@ -100,6 +100,50 @@
+    }
+ }
+ 
++/* The bounds of a draw's indices. Panfrost maps buffers write-combined, so
++ * reading them one index at a time from the mapping (u_vbuf_get_minmax_index)
++ * is slow on the CPU: a whole draw's worth is copied out with one memcpy, its
++ * wide loads, into cached memory, and scanned there. Streamed index data (a
++ * PSP emulator's, new each frame) misses pan_minmax_cache every time. */
++static void
++panfrost_minmax_index(struct pipe_context *pctx,
++                      const struct pipe_draw_info *info,
++                      const struct pipe_draw_start_count_bias *draw,
++                      unsigned *min_index, unsigned *max_index)
++{
++   static __thread void *copy;
++   static __thread size_t copy_size;
++   size_t size = (size_t)draw->count * info->index_size;
++
++   if (info->has_user_indices || size == 0) {
++      u_vbuf_get_minmax_index(pctx, info, draw, min_index, max_index);
++      return;
++   }
++   if (size > copy_size) {
++      void *grown = realloc(copy, size);
++      if (!grown) {
++         u_vbuf_get_minmax_index(pctx, info, draw, min_index, max_index);
++         return;
++      }
++      copy = grown;
++      copy_size = size;
++   }
++
++   struct pipe_transfer *transfer = NULL;
++   const void *indices = pipe_buffer_map_range(
++      pctx, info->index.resource, draw->start * info->index_size, size,
++      PIPE_MAP_READ, &transfer);
++   memcpy(copy, indices, size);
++   pipe_buffer_unmap(pctx, transfer);
++
++   struct pipe_draw_info user = *info;
++   user.has_user_indices = true;
++   user.index.user = copy;
++   struct pipe_draw_start_count_bias start = *draw;
++   start.start = 0;
++   u_vbuf_get_minmax_index(pctx, &user, &start, min_index, max_index);
++}
++
+ /* Gets a GPU address for the associated index buffer. Only gauranteed to be
+  * good for the duration of the draw (transient), could last longer. Also get
+  * the bounds on the index buffer for the range accessed by the draw. We do
+@@ -135,7 +179,7 @@
+ 
+    if (needs_indices) {
+       /* Fallback */
+-      u_vbuf_get_minmax_index(&ctx->base, info, draw, min_index, max_index);
++      panfrost_minmax_index(&ctx->base, info, draw, min_index, max_index);
+ 
+       if (!info->has_user_indices)
+          pan_minmax_cache_add(rsrc->index_cache, info->index_size, draw->start,

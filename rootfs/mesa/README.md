@@ -31,8 +31,17 @@ What changed against Arch's PKGBUILD:
   `mesa_clc`, which needs clang, LLVM and libclc. The first build makes just `mesa_clc` and
   `vtn_bindgen2` with LLVM. The second builds the driver with `-D mesa-clc=system`, which
   takes them from `PATH`, so nothing in the package links LLVM.
-- `VERSION` is `26.2.4-nibos1.1` (Arch's is `-arch1.1`), so it shows in
+- `VERSION` is `26.2.4-nibos<epoch>.<pkgrel>`, `26.2.4-nibos1.3` now (Arch's is `-arch1.1`), so it shows in
   `GL_VERSION` and in libgallium's file name.
+
+- One patch, `0001-panfrost-copy-indices-before-scanning-them.patch` (`pkgrel=3`). Panfrost
+  needs a draw's index bounds; when its bounds cache misses it scans the indices, and it read them
+  one at a time from the buffer's mapping, which is write-combined: slow for the CPU. A PSP
+  emulator (PPSSPP) streams new indices every frame and misses the cache every time: the scan
+  was the hottest function of a Ridge Racer 2 race (9 % of the samples, `perf` with an unstripped
+  build). The patch copies the draw's indices out with one `memcpy` into cached memory and scans
+  the copy; the result is the same. The race: 14.8 to 12.4 ms a frame (nibcase's
+  docs/validation.md).
 
 Checked on the device: EGL 1.5 on GBM, `Mali-G52 r1 MC1 (Panfrost)`, OpenGL ES 3.1. DSlot's
 two-window GLES test (KMSDRM, `SDL_KMSDRM_ATOMIC=0`) runs at 56 fps, as before. `llvm-libs` and
