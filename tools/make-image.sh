@@ -157,7 +157,8 @@ if [ "$edition" = dslot ]; then
     if ! ls "$NIBOS_ROOT"/rootfs/mesa/out/mesa-nibos-*.pkg.tar.* >/dev/null 2>&1; then
         in_vm bash -c "mkdir -p ~/mesa-build/nibos && cp '$NIBOS_ROOT/rootfs/mesa/PKGBUILD' ~/mesa-build/nibos/ && cd ~/mesa-build/nibos && PKGDEST='$NIBOS_ROOT/rootfs/mesa/out' makepkg -s --noconfirm" >/dev/null
     fi
-    cp "$NIBOS_ROOT"/rootfs/mesa/out/mesa-nibos-*.pkg.tar.* "$pkgs/"
+    # The newest build only: out/ keeps the earlier ones, and pacman given two of a package fails.
+    cp "$(ls "$NIBOS_ROOT"/rootfs/mesa/out/mesa-nibos-*.pkg.tar.* | sort -V | tail -1)" "$pkgs/"
     dslot_env=(DSLOT=1 SAFE_MODE="$NIBOS_ROOT/rootfs/safe-mode" PREVIEW_EMULATORS=inktick
         READAHEAD="$NIBOS_ROOT/rootfs/readahead/out/nibos-readahead"
         PACKAGES="$(find "$pkgs" -name '*.pkg.tar.*' | sort | tr '\n' ' ')")
