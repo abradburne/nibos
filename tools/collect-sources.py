@@ -66,6 +66,7 @@ OWN_PACKAGES = {
     "libretro-gw": "core:gw",
     "libretro-handy": "core:handy",
     "libretro-pcsx-rearmed-nibos": "core:pcsx-rearmed",
+    "libretro-ppsspp-nibos": "core:ppsspp",
 }
 
 
