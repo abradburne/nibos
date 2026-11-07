@@ -113,7 +113,8 @@ root. Brightness per screen, volume, Wi-Fi, lid and battery protect are done.
 
 - **Battery and charging for programs** as a nibOS interface rather than raw sysfs.
 - **Bluetooth pairing** from the device (today from a shell with `bluetoothctl`).
-- **An on-screen indicator** for the brightness and volume shortcuts.
+- ~~**An on-screen indicator** for the brightness and volume shortcuts~~: done (nibkit's
+  `levels` and `menu::level`, [display.md](engineering/display.md)).
 - Done when: each setting in the device interface's table is done, with a `nib` command and docs.
 
 ## 8. Recovery and diagnostics

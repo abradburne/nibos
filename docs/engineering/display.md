@@ -83,26 +83,22 @@ Tried and measured, or found not to work; the source says more. Add to it when s
 - An emulator driving its own KMS page flips was blamed for the suspend hang; it wasn't the cause.
 - Open: a warm restart leaves the top panel striped.
 
-## Ideas not yet done
-
-### An on-screen indicator for brightness and volume
+## The volume and brightness indicator
 
 Menu + volume changes both screens' brightness and the volume keys change the volume from
-anywhere, but nothing on the screens shows the new level: in a game the light changes and the
-volume shows not at all. An indicator (a bar for a second) has to draw over whatever program
-owns the screens, which nibOS's daemons don't. Two routes:
+anywhere, so the program on the screens never hears of the press. After each step the daemon
+that made it (`nibos-input`, `nibos-audio`) announces the new level in `/run/nibos/osd/`
+(`hw/daemons/src/osd.rs`: a file named `brightness` or `volume` holding the percent, renamed
+in), and every program that draws over a game shows it the same way: nibkit's `levels` watches
+the folder and `menu::level` draws a panel at the top screen's bottom right (a speaker or a sun,
+a bar, the percent) for 1.5 s, fading over 0.5 s; nibkit-menu-c's `nib_levels_*` is the same for
+C and C++. DSlot, DSperate (DS and GBA), nibcase (every libretro core) and inkdot draw it, a
+toast in that corner moving up above it. Only the keys announce, so a settings slider or the
+screensaver's dimming shows nothing. A KMS overlay plane drawn by the daemons themselves was the
+other route; it needs DRM master or a lease while the program holds the screens, so the
+programs draw it instead, as they draw RetroAchievements' toasts.
 
-- **A KMS overlay plane** from the daemon that made the change (`nibos-input`, `nibos-audio`),
-  composed by the display hardware over the program's own plane. Needs a free overlay plane on
-  each VOP2 video port that the program doesn't use, DRM master or a lease for the daemon while
-  the program holds the screens (one DRM master at a time, so likely a lease the program
-  grants, or the daemon as master handing the primary planes out), and care that SDL's legacy
-  KMSDRM path doesn't take the planes over. First step: measure which VOP2 planes are free
-  while DSlot and an emulator run.
-- **A small protocol programs opt into**: the daemon announces "brightness 45%" or "volume 20%"
-  (a socket or D-Bus signal, through the planned device service in
-  [device-interface.md](device-interface.md)), and the boot UI and the emulator draw it
-  themselves. Simple and safe, but every program has to do it.
+## Ideas not yet done
 
 ### Mesa: keep cached buffer objects mapped
 

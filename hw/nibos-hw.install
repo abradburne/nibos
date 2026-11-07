@@ -8,7 +8,7 @@ post_install() {
     systemctl enable $units >/dev/null 2>&1 || true
     systemctl --global enable nibos-audio.service >/dev/null 2>&1 || true
     udevadm control --reload >/dev/null 2>&1 || true
-    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf >/dev/null 2>&1 || true
+    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf nibos-osd.conf >/dev/null 2>&1 || true
     # Start from the levels the screens have now (systemd's restore set them).
     nibos-backlight save >/dev/null 2>&1 || true
     # "add", as at boot: the LED, wake-up and backlight rules match only that.
@@ -44,7 +44,7 @@ post_upgrade() {
     # Units new in this version, enabled as a fresh install would.
     systemctl enable nibos-backlight.service nibos-charge-boot.service nibos-boot-good.service nibos-radios-restore.service nibos-update-boot.service >/dev/null 2>&1 || true
     systemctl start nibos-backlight.service >/dev/null 2>&1 || true
-    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf >/dev/null 2>&1 || true
+    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf nibos-osd.conf >/dev/null 2>&1 || true
     [ -n "$(ls /var/lib/nibos/backlight 2>/dev/null)" ] || nibos-backlight save >/dev/null 2>&1 || true
     udevadm control --reload >/dev/null 2>&1 || true
     udevadm trigger --action=add --subsystem-match=backlight --subsystem-match=power_supply >/dev/null 2>&1 || true
