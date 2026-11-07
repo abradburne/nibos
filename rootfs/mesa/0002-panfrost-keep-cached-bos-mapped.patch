@@ -1,0 +1,55 @@
+--- a/src/gallium/drivers/panfrost/pan_bo.c	2026-11-07 17:14:10.725439797 +0900
++++ b/src/gallium/drivers/panfrost/pan_bo.c	2026-11-07 17:14:23.998749414 +0900
+@@ -111,6 +111,14 @@
+    struct pan_kmod_vm *vm = bo->dev->kmod.vm;
+    uint64_t gpu_va = bo->ptr.gpu;
+ 
++   /* A BO keeps its CPU mapping in the BO cache (panfrost_bo_unreference):
++    * it goes with the BO. */
++   if (bo->ptr.cpu &&
++       os_munmap((void *)(uintptr_t)bo->ptr.cpu, panfrost_bo_size(bo))) {
++      mesa_loge("munmap failed: %s", strerror(errno));
++      abort();
++   }
++
+    /* BO will be freed with the sparse array, but zero to indicate free */
+    memset(bo, 0, sizeof(*bo));
+ 
+@@ -335,22 +343,6 @@
+    return 0;
+ }
+ 
+-static void
+-panfrost_bo_munmap(struct panfrost_bo *bo)
+-{
+-   PAN_TRACE_FUNC(PAN_TRACE_GL_BO);
+-
+-   if (!bo->ptr.cpu)
+-      return;
+-
+-   if (os_munmap((void *)(uintptr_t)bo->ptr.cpu, panfrost_bo_size(bo))) {
+-      mesa_loge("munmap failed: %s", strerror(errno));
+-      abort();
+-   }
+-
+-   bo->ptr.cpu = NULL;
+-}
+-
+ struct panfrost_bo *
+ panfrost_bo_create(struct panfrost_device *dev, size_t size, uint32_t flags,
+                    const char *label)
+@@ -456,9 +448,11 @@
+     * the slot has been returned already.
+     */
+    if (bo->dev && p_atomic_read(&bo->refcnt) == 0) {
+-      /* When the reference count goes to zero, we need to cleanup */
+-      panfrost_bo_munmap(bo);
+-
++      /* When the reference count goes to zero, we need to cleanup. The CPU
++       * mapping stays while the BO is in the cache: a batch's pool BOs come
++       * back from the cache many times a frame, and unmapping them here meant
++       * an mmap and a page fault per page touched at every reuse.
++       * panfrost_bo_free unmaps it. */
+       if (dev->debug & (PAN_DBG_TRACE | PAN_DBG_SYNC))
+          pandecode_inject_free(dev->decode_ctx, bo->ptr.gpu,
+                                panfrost_bo_size(bo));

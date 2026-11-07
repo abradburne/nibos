@@ -31,7 +31,7 @@ What changed against Arch's PKGBUILD:
   `mesa_clc`, which needs clang, LLVM and libclc. The first build makes just `mesa_clc` and
   `vtn_bindgen2` with LLVM. The second builds the driver with `-D mesa-clc=system`, which
   takes them from `PATH`, so nothing in the package links LLVM.
-- `VERSION` is `26.2.4-nibos<epoch>.<pkgrel>`, `26.2.4-nibos1.3` now (Arch's is `-arch1.1`), so it shows in
+- `VERSION` is `26.2.4-nibos<epoch>.<pkgrel>`, `26.2.4-nibos1.4` now (Arch's is `-arch1.1`), so it shows in
   `GL_VERSION` and in libgallium's file name.
 
 - One patch, `0001-panfrost-copy-indices-before-scanning-them.patch` (`pkgrel=3`). Panfrost
@@ -42,6 +42,13 @@ What changed against Arch's PKGBUILD:
   build). The patch copies the draw's indices out with one `memcpy` into cached memory and scans
   the copy; the result is the same. The race: 14.8 to 12.4 ms a frame (nibcase's
   docs/validation.md).
+- `0002-panfrost-keep-cached-bos-mapped.patch` (`pkgrel=4`). Panfrost unmapped a BO when it went
+  into its BO cache and mapped it again when it came out. A batch's pools take their BOs from
+  the cache, and PPSSPP draws about 21 batches a frame, so every frame paid dozens of
+  `mmap`/`munmap` calls and a page fault for each page touched again. A cached BO now keeps its
+  CPU mapping, and `panfrost_bo_free` unmaps it (every way out of the cache goes through it; a
+  BO the kernel purged is still caught on fetch and freed). The race: 12.2-13.5 to 10.1-10.7 ms
+  a frame (three runs each from one resume state); the frames the same.
 
 Checked on the device: EGL 1.5 on GBM, `Mali-G52 r1 MC1 (Panfrost)`, OpenGL ES 3.1. DSlot's
 two-window GLES test (KMSDRM, `SDL_KMSDRM_ATOMIC=0`) runs at 56 fps, as before. `llvm-libs` and
