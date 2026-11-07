@@ -67,6 +67,7 @@ OWN_PACKAGES = {
     "libretro-handy": "core:handy",
     "libretro-pcsx-rearmed-nibos": "core:pcsx-rearmed",
     "libretro-ppsspp-nibos": "core:ppsspp",
+    "libretro-fbneo": "core:fbneo",
 }
 
 
