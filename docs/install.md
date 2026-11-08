@@ -17,8 +17,9 @@ Both give one of two setups:
 
 ## Writing an image
 
-1. **Get the image**: `nibos-<version>-rgds.img.xz` (nibOS) or
-   `nibos-<version>-rgds-dslot.img.xz` (nibOS + DSlot), and `SHA256SUMS`, from a release, or
+1. **Get the image**: `nibos-<version>-rg-ds-plus.img.xz` (nibOS, https://nibos.alanb.dev) or
+   `dslot-<version>-rg-ds-plus.img.xz` (nibOS + DSlot, https://dslot.alanb.dev), and
+   `SHA256SUMS`, from a release (older releases name them `nibos-<version>-rgds[-dslot].img.xz`), or
    build one with `tools/make-image.sh [--dslot]`. What each contains:
    [design/images.md](design/images.md). *Check:* `sha256sum -c SHA256SUMS --ignore-missing`
    (`shasum -a 256 -c` on a Mac).

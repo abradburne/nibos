@@ -10,6 +10,11 @@
 # passphrase. The key is used where it is and never copied. Writes, for each edition, into
 # out/release-<version>/: the manifest and its .minisig, the .slot payload and the .img.xz;
 # then SHA256SUMS.
+#
+# Names: the update files keep nibos-<version>-<image> (rgds, rgds-dslot), which is what every
+# installed device's updater looks for (nibos-update, channel_manifest). The card images are
+# named for what a person downloads: nibos-<version>-<board>.img.xz for nibOS, and
+# dslot-<version>-<board>.img.xz for DSlot's, which its own site offers.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
@@ -47,8 +52,14 @@ for w in "${works[@]}"; do
     else
         in_vm minisign -S -s "$key" -m "$manifest" -t "$trusted"
     fi
+    edition=$(sed -n 's/^NIBOS_EDITION=//p' "$w/docs/release")
+    board=$(sed -n 's/^NIBOS_BOARD=//p' "$w/docs/release")
+    case $edition in
+    dslot) card="dslot-$version-$board.img.xz" ;;
+    *) card="nibos-$version-$board.img.xz" ;;
+    esac
     img="$NIBOS_ROOT/out/${w##*/work-}.img.xz"
-    [ ! -f "$img" ] || cp "$img" "$out/nibos-$version-$image.img.xz"
+    [ ! -f "$img" ] || cp "$img" "$out/$card"
 done
-(cd "$out" && shasum -a 256 nibos-* > SHA256SUMS)
+(cd "$out" && shasum -a 256 nibos-* dslot-* > SHA256SUMS)
 ls -la "$out"

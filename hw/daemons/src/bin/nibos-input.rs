@@ -281,8 +281,9 @@ fn main() {
                         None => Ok(()),
                     },
                     Action::Brightness(dir) => {
-                        if let Err(e) = backlights.step(&Target::All, dir) {
-                            eprintln!("nibos-input: brightness: {e}");
+                        match backlights.step(&Target::All, dir) {
+                            Ok(now) => announce_brightness(&now),
+                            Err(e) => eprintln!("nibos-input: brightness: {e}"),
                         }
                         Ok(())
                     }
@@ -292,5 +293,16 @@ fn main() {
                 }
             }
         }
+    }
+}
+
+/// Says what the shortcut set, for the indicator the program on the screens draws
+/// ([`nibos_hw::osd`]): both screens move together, so the top's level.
+fn announce_brightness(now: &[nibos_hw::backlight::Backlight]) {
+    let Some(b) = now.iter().find(|b| b.screen == "top").or(now.first()) else {
+        return;
+    };
+    if let Err(e) = nibos_hw::osd::announce(nibos_hw::osd::BRIGHTNESS, b.percent()) {
+        eprintln!("nibos-input: announcing the brightness: {e}");
     }
 }

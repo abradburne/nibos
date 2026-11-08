@@ -91,6 +91,9 @@ Change device settings through nibOS's names, without root
   backlight down (touch keeps working), `0` to light it (`nibkit::backlight::set_off`); **turn it
   back on before you exit**. Any
   brightness change through nibOS (Menu + volume too) also lights it.
+- **The volume and brightness indicator:** the keys' changes are announced in
+  `/run/nibos/osd/`; a program that draws over a game shows them as every app does with
+  nibkit's `levels::watch()` and `menu::level::Indicator` (C: `nib_levels_*`), bottom right.
 - **Volume:** `wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 40%` as the login user (the volume keys
   step onto multiples of 5%, as brightness does); `nibkit::device` has it, and
   `device::watch_volume` for changes made elsewhere.

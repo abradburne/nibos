@@ -178,14 +178,28 @@ fn volume_keys(device: String) {
                 let status = Command::new("wpctl")
                     .args(["set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", &to])
                     .status();
-                if let Err(e) = status {
-                    eprintln!("nibos-audio: wpctl: {e}");
+                match status {
+                    // Said at the ends too (up at 100%), so a press there still shows it.
+                    Ok(s) if s.success() => announce_volume(&to),
+                    Ok(s) => eprintln!("nibos-audio: wpctl set-volume: {s}"),
+                    Err(e) => eprintln!("nibos-audio: wpctl: {e}"),
                 }
             }
         }
         eprintln!("nibos-audio: lost {device}");
         thread::sleep(Duration::from_secs(1));
     });
+}
+
+/// Says what the keys set (`to`, "40%"), for the indicator the program on the screens draws
+/// ([`nibos_hw::osd`]).
+fn announce_volume(to: &str) {
+    let Ok(percent) = to.trim_end_matches('%').parse::<u32>() else {
+        return;
+    };
+    if let Err(e) = nibos_hw::osd::announce(nibos_hw::osd::VOLUME, percent) {
+        eprintln!("nibos-audio: announcing the volume: {e}");
+    }
 }
 
 fn main() {

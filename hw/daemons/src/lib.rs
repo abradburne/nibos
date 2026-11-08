@@ -17,6 +17,7 @@
 //! - [`audio`]: how `nibos-audio` picks sinks and reads PipeWire's tools;
 //! - [`provision`]: checking a downloadable image's `provision.toml`;
 //! - [`steps`]: the volume keys' steps, for brightness and volume alike;
+//! - [`osd`]: the level the keys just set, announced for the indicator apps draw;
 //! - [`update`]: system updates: a release's manifest and signature, and writing it to the
 //!   slot that isn't running (`nibos-update`).
 //!
@@ -30,6 +31,7 @@ pub mod charge;
 pub mod controls;
 pub mod gamepad;
 pub mod keys;
+pub mod osd;
 pub mod power;
 pub mod provision;
 pub mod steps;
