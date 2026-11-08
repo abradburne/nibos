@@ -1,15 +1,31 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-beta2
 
+New systems and the on-screen volume and brightness, with fixes from the first beta.
+
+- **The PSP, in DSlot 0.6.0 and nibcase 0.3.0.** A PlayStation Portable page, `Roms/PSP`
+  (`.iso`, `.cso`, `.chd`, or a download's `EBOOT.PBP` in a folder of its own), played by the
+  PPSSPP core (its ARM64 JIT, drawn on the GPU), the games shown as UMDs on the shelf. Two Panfrost
+  fixes in mesa-nibos 26.2.4-4 make GPU-drawn games faster: a Ridge Racer 2 race went from 14.8
+  to about 10 ms a frame. RetroAchievements are declared for the PSP; a game's placard on the
+  DS+ is still to be seen.
+- **Arcade, Mega-CD, 32X and Pico.** An Arcade page, `Roms/ARCADE`, played by FinalBurn Neo, and
+  pages for PicoDrive's other systems. PicoDrive is now the Mega Drive's default core (Sonic 5.5
+  ms a frame, from BlastEm's 9.7). FinalBurn Neo and PicoDrive are licensed for non-commercial
+  use only; the image's NOTICE says so. Played on the DS+ so far: arcade games with MAME's free
+  sets, and the Mega Drive; no Mega-CD, 32X or Pico game has been run yet, and achievements
+  through PicoDrive are unchecked.
 - **Volume and brightness show on screen.** Press the volume keys, or Menu + volume for the
   brightness, and a small panel at the bottom right of the top screen shows the new level, then
   fades: on DSlot's shelf and in every emulator (DSperate, nibcase's cores, inkdot). nibos-hw
-  0.1.0-51's daemons announce each step in `/run/nibos/osd/`; nibkit 0.4.0 draws it.
+  0.1.0-51's daemons announce each step in `/run/nibos/osd/`; nibkit 0.4 draws it.
 - **The card images are named for what they are**: `nibos-<version>-rg-ds-plus.img.xz` for
   nibOS, offered on https://nibos.alanb.dev, and `dslot-<version>-rg-ds-plus.img.xz` for DSlot's
   image, offered on its own site, https://dslot.alanb.dev. The update files keep their names, so
   every device already installed finds its updates as before.
+- **zip 9.4** in DSlot, nibcase and nibkit 0.4.1's nib-cheevos (from 2.x), for the zip crate's
+  security advisories. Zipped games are only ever read into memory.
 - **`nib update` says what the updater is doing at every step**: checking, finishing a download
   (its boot files and your settings) and restarting each have their own line, and "up to date"
   means just that.
