@@ -6,7 +6,7 @@
 PACKAGES_TXT is `pacman -Qi`'s name, version and licences, one package a line (rootfs/make-arch.sh).
 Appended: the packages whose licence isn't a plain free software one (custom, LicenseRef-...,
 non-commercial), each named, with what it means for whoever passes the image on where we know
-(Snes9x, FinalBurn Neo, FDK-AAC); then every package with its version and licence.
+(Snes9x, FinalBurn Neo, PicoDrive, FDK-AAC); then every package with its version and licence.
 """
 import re
 import sys
@@ -20,6 +20,10 @@ NOTES = {
              "image, or anything built from it that includes FinalBurn Neo, may not be sold, "
              "leased or rented, and a project using its source may not ask for donations. Its "
              "licence must be passed on with it, verbatim.",
+    "picodrive": "PicoDrive (the Mega-CD, 32X and Pico core) is licensed for non-commercial use "
+                 "only: this image, or anything built from it that includes PicoDrive, may not "
+                 "be sold or used in a commercial product or activity, and a modified PicoDrive "
+                 "must come with its complete source.",
     "libfdk-aac": "The Fraunhofer FDK AAC library (Bluetooth AAC audio) is redistributed under "
                   "Fraunhofer's licence, which grants no patent rights: AAC patent licences "
                   "are the user's affair where they apply.",
@@ -42,7 +46,7 @@ def main(notice, packages_txt):
     for name, version, lic in restricted:
         out.append(f"- {name} {version}: {lic}")
         note = next((n for key, n in NOTES.items() if name == key or name.startswith(key + "-")
-                     or (key in ("snes9x", "fbneo") and key in name)), None)
+                     or (key in ("snes9x", "fbneo", "picodrive") and key in name)), None)
         if note:
             out.append(f"  {note}")
     if not restricted:

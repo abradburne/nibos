@@ -148,7 +148,7 @@ if [ "$edition" = dslot ]; then
         cd '$dsperate/packaging/arch' && _src='$dsperate' _nibkit='$nibkit/nibkit-menu-c' $mk
         cd '$inkdot/packaging/nibos' && $mk
         cd '$nibcase/packaging/nibos' && $mk
-        for c in beetle-ngp beetle-wswan gearsystem gw handy pcsx-rearmed ppsspp fbneo; do (cd '$nibcase/packaging/cores/'\$c && $mk); done
+        for c in beetle-ngp beetle-wswan gearsystem gw handy pcsx-rearmed ppsspp fbneo picodrive; do (cd '$nibcase/packaging/cores/'\$c && $mk); done
         cd '$inktick/packaging/nibos' && NIBKIT='$nibkit/nibkit' $mk
         cd '$NIBOS_ROOT/rootfs/portmaster' && $mk
         cd '$NIBOS_ROOT/rootfs/readahead' && mkdir -p out && gcc -O2 -static -o out/nibos-readahead readahead.c

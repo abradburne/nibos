@@ -68,6 +68,7 @@ OWN_PACKAGES = {
     "libretro-pcsx-rearmed-nibos": "core:pcsx-rearmed",
     "libretro-ppsspp-nibos": "core:ppsspp",
     "libretro-fbneo": "core:fbneo",
+    "libretro-picodrive": "core:picodrive",
 }
 
 
