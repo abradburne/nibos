@@ -247,6 +247,8 @@ if [ "$for_image" = 1 ]; then
     if [ -n "${DOCS:-}" ]; then
         install -Dm644 "$DOCS/NOTICE" "$root/usr/share/doc/nibos/NOTICE"
         [ ! -f "$DOCS/release" ] || install -Dm644 "$DOCS/release" "$root/usr/lib/nibos/release"
+        # What's new in the release, for the menus (tools/whats-new.py, nibkit's guide).
+        [ ! -f "$DOCS/whats-new.txt" ] || install -Dm644 "$DOCS/whats-new.txt" "$root/usr/share/nibos/whats-new.txt"
         cp -R "$DOCS/licenses/." "$root/usr/share/licenses/"
     fi
     install -d "$root/usr/share/doc/nibos"

@@ -1,0 +1,20 @@
+The menu
+
+Back (beside Menu) opens this menu on the touch screen. It has a page for each level of
+settings: Game (the game picked on the shelf), its console (DS, GBA...) and System, with
+Network and Achievements beside them.
+
+- L and R, or a tap on a tab: the page before or after.
+- L2 and R2, or a tap on a section: the next part of a long page.
+- D-pad up and down: pick a row.
+- Left and right, A, or a tap on the row: change it.
+- Y: the row goes back to what it inherits.
+- B or Back: close the menu.
+
+A setting for a game wins over its console's, which wins over the system's, and each row says
+where its value comes from.
+
+# Reading a page like this one
+- Up and down: a line. Left and right: a screen.
+- Drag it with a finger.
+- B: back to the list.

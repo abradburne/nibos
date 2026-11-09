@@ -1,0 +1,17 @@
+Sleep and charging
+
+# Sleep
+- Close the lid, or press power: sleep. Open it, or press power: wake. Wi-Fi reconnects about
+  2 seconds later.
+- Asleep on battery, the device powers off after an hour. System > Power > Power off when
+  asleep changes that.
+
+# Charging
+- The light is green while the device runs, and amber while the charger is plugged in (asleep
+  too).
+- Plugged into a device that is switched off, the charger switches it on and it charges
+  asleep: dark, with the amber light on. Press power to use it. Unplugging it switches it off
+  again.
+- Battery protect (System > Power) stops charging at about 80%.
+- Charge from the USB-C port that charges the device. Keyboards and pads go in the other
+  USB-C port.

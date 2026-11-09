@@ -1,0 +1,18 @@
+Wi-Fi
+
+The menu's Network page has the Wi-Fi switch, the network joined, Look for networks, then each
+network in range with its signal. A tap on the Wi-Fi icon in the bar at the bottom opens it.
+
+- A on a network joins it. One that needs a passphrase brings up the keyboard.
+- A twice on the joined network leaves it.
+- Y twice on a saved network forgets it.
+- Y elsewhere, or the Network info section: what to read out when something won't connect.
+
+# The keyboard
+- The D-pad and A type, or tap the keys.
+- B deletes, X is a space, Y shows the passphrase.
+- L is shift, R the symbols.
+- Start is Done, Select cancels.
+
+A network can also be set up before the first start, in provision.toml's [wifi] on the card's
+NIBOS partition.

@@ -104,6 +104,12 @@ NIBOS_IMAGE=${name#nibos-"$version"-}
 NIBOS_CHANNEL=$NIBOS_UPDATE_CHANNEL
 NIBOS_UPDATE_REPO=$NIBOS_UPDATE_REPO
 EOF
+# What's new in this release, for the menus (/usr/share/nibos/whats-new.txt, nibkit's guide):
+# CHANGELOG.md's section for the version, as plain text. A build with no section of its own (a
+# test build named by VERSION) has none, and the menus leave What's new out.
+if ! python3 "$here/whats-new.py" "$NIBOS_ROOT/CHANGELOG.md" "$version" > "$work/docs/whats-new.txt"; then
+    rm -f "$work/docs/whats-new.txt"
+fi
 
 # nibkit (NIBKIT_REPO at NIBKIT_TAG), for its licences and for DSperate's pause menu and inktick,
 # laid out the way their PKGBUILDs look for it (_nibkit=, NIBKIT=): nibkit with a LICENSE, and

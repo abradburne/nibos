@@ -1,0 +1,14 @@
+Adding games
+
+Put the card in a computer and copy the games into Roms/<SYSTEM>/ on its NIBOS-DATA drive:
+Roms/NDS for the DS, Roms/GBA, Roms/GB, Roms/GBC and so on. A second card in TF2 works too
+(exFAT or FAT32, any name), with a Roms folder of its own.
+
+DSlot makes the folder of every system it can play, each with a _README.txt saying which files
+it takes, the BIOS it needs and where its saves go. Nothing is ever renamed, moved or deleted.
+
+Folders inside a system's folder (Roms/GB/Puzzle) show on the shelf as folders, before the
+games: A opens one and B comes back out.
+
+A system's page appears on the shelf once it has games. If new games don't show,
+System > Shelf > Rescan games looks in every folder again.

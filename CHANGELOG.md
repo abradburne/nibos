@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Help on the device.** DSlot's System → Help shows What's new in the running release and
+  short topics on the controls, the menu, saves, sleep and charging, Wi-Fi, adding games and the
+  console. They are text files: `/usr/share/nibos/help/` comes with nibos-hw, and every image's
+  `/usr/share/nibos/whats-new.txt` is this changelog's section for its version, written by
+  `tools/make-image.sh` (`tools/whats-new.py`), so a release's notes reach the device with no
+  copying by hand. nibkit 0.5's `guide` reads them for any app's menu.
+- **DSlot 0.7.0**: folders of games on the shelf (A opens one, B comes back out); Select + A
+  starts a game from the beginning, its resume point set aside as `.before-fresh` rather than
+  deleted; B never starts a game.
+
 ## 0.1.0-beta2
 
 New systems and the on-screen volume and brightness, with fixes from the first beta.

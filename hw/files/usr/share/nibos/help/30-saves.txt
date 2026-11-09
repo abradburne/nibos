@@ -1,0 +1,18 @@
+Saves
+
+Each game's saves and save states are kept in Saves/<SYSTEM>/<ROM name>/ on the NIBOS-DATA
+drive, the first card's games drive.
+
+When you quit a game, its emulator saves where you left off: its resume point, shown over the
+game's box on the top screen. The game's pause menu has numbered save states as well.
+
+To start a game from the beginning once, hold Select and press A: "Starting fresh" shows as
+the cart goes in. The resume point isn't deleted: it is renamed with .before-fresh at the end,
+in the game's saves folder, so renaming it back brings it back.
+
+On the menu's Game page, clearing the resume state and deleting the saves each ask first: A,
+then A again.
+
+An update keeps your games, saves and settings. Writing a new image keeps NIBOS-DATA, and puts
+the settings back from the copy nibOS keeps in its nibos/settings/ folder. The
+RetroAchievements sign-in isn't copied: sign in again after a new image.

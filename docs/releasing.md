@@ -15,7 +15,10 @@ source offer are built from.
 
 1. Everything for the release is committed in each tree the images are built from, and pushed
    where it has a remote (the source offer names those commits).
-2. `CHANGELOG.md`: the `## Unreleased` section becomes `## <version>`. Commit it.
+2. `CHANGELOG.md`: the `## Unreleased` section becomes `## <version>`. Commit it. The section
+   is also the release's **What's new** on the device: `tools/make-image.sh` writes it, as
+   plain text (`tools/whats-new.py`), to `/usr/share/nibos/whats-new.txt`, which DSlot's System
+   → Help shows. Nothing is copied by hand, so write it to be read on the touch screen.
 3. Tag it, annotated: `git tag -a v<version> -m "nibOS <version>: <one line>"`. The images are
    stamped with this commit (`NIBOS_BUILD`), and the script refuses a tag that isn't at HEAD.
 

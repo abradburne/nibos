@@ -1,0 +1,24 @@
+Controls
+
+# On the shelf
+- D-pad left and right, or a swipe: browse the games.
+- A, or drag the cart down: play the game, or open a folder of games.
+- Select + A: play the game from the start, not from where you left off.
+- B: out of the folder of games open.
+- X: the game's page. Y: mark it as a favourite, or not.
+- L and R, or a tap on a tab: the page before or after.
+- Select: the system picker. Start: how the page is shown.
+- Back (beside Menu): this menu.
+- Select + Start: leave DSlot for the console.
+
+# In a game
+- Menu: the game's pause menu.
+- The volume keys: the volume.
+- Menu + the volume keys: both screens' brightness.
+
+# Power
+- Close the lid, or press power: sleep. Open it, or press power: wake.
+- Hold power for a second: the power menu (Sleep, Restart, Power off). In a game, the game
+  is saved and put away first.
+- Hold power for about 10 seconds: the power is cut, without saving anything. Only for a
+  device that doesn't answer.

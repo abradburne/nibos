@@ -1,0 +1,16 @@
+The console
+
+Select + Start leaves DSlot for the console: a shell, on the top screen, with a keyboard on the
+touch screen.
+
+- Touch the keys to type. Shift, Ctrl, Alt and Fn are tapped before a key (twice to keep them
+  on).
+- The buttons type too: the D-pad the arrows, A Enter, B Backspace, X Tab, Y Ctrl-C, L Shift
+  and R Ctrl while held.
+- Menu + X hides the keyboard and shows it again.
+- A USB keyboard in the host-only USB-C port, or a Bluetooth one, works as well.
+- nib help lists the commands this device has.
+
+From a computer, ssh nibos@nibos.local with the key from provision.toml's [ssh].
+
+Restart (hold power) to come back to DSlot.

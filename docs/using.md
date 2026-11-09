@@ -103,6 +103,16 @@ FAT32, any name). Saves and save states are kept per game in `Saves/<SYSTEM>/<RO
 Games are started by a launcher and emulators that are separate projects, installed as their
 own packages; their controls and settings are theirs ([rootfs/dslot/README.md](../rootfs/dslot/README.md#games)).
 
+## Help on the device
+
+DSlot's menu has **System → Help**: **What's new** in the running release (its `CHANGELOG.md`
+section, written into the image as `/usr/share/nibos/whats-new.txt`) and short topics on the
+controls, the menu, saves, sleep and charging, Wi-Fi, adding games and the console (nibos-hw's
+`/usr/share/nibos/help/*.txt`, plain text, the first line the title). Up and down scroll a
+topic a line, left and right a screen, and a finger drags it. nibkit's `guide` reads the files,
+so any app's menu can show them; `NIBOS_GUIDE=DIR` points it at another folder laid out the
+same way, to try a topic out.
+
 ## Brightness
 
 Each screen has its own brightness, kept across restarts:

@@ -252,6 +252,11 @@ check "the root is grown to its partition at every start, not once" '[ -L "$r/et
 check "the boot confirmation doesn't hold the start-up open" '[ "$(sed -n "s/^Type=//p" "$r/usr/lib/systemd/system/nibos-boot-good.service")" = simple ] && ! grep -q "^ExecStartPost" "$r/usr/lib/systemd/system/nibos-boot-good.service"'
 check "system updates: nibOS's update key" 'grep -q "^untrusted comment: minisign public key 41B02B0D6ED49D26$" "$r/usr/lib/nibos/update.pub"'
 check "system updates: the release file, nibos-update, its boot step and keep list" 'grep -q "^NIBOS_VERSION=." "$r/usr/lib/nibos/release" && grep -q "^NIBOS_UPDATE_REPO=." "$r/usr/lib/nibos/release" && [ -x "$r/usr/bin/nibos-update" ] && [ -x "$r/usr/lib/nibos/nib-update" ] && [ -L "$r/etc/systemd/system/multi-user.target.wants/nibos-update-boot.service" ] && [ -s "$r/usr/lib/nibos/update-keep" ]'
+# What's new and the help topics the menus show (nibkit's guide): the topics from nibos-hw, and
+# What's new from CHANGELOG.md's section for the image's version (tools/whats-new.py), where
+# it has one (a test build named by VERSION has none).
+version=$(sed -n 's/^NIBOS_VERSION=//p' "$r/usr/lib/nibos/release")
+check "the menus' help topics, and What's new for $version where CHANGELOG.md has it" '[ -s "$r/usr/share/nibos/help/10-controls.txt" ] && { ! grep -qx "## $version" "$(dirname "$0")/../CHANGELOG.md" || head -1 "$r/usr/share/nibos/whats-new.txt" | grep -qx "What.s new in nibOS $version"; }'
 # The timer fires at once in a container (OnBootSec counts from the host's start); the check
 # reads the whole of /usr, so give it a while.
 for _ in $(seq 180); do grep -qs "^result=" "$s/root-verified" && break; sleep 1; done
