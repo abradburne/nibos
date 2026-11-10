@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **The power key starts the device after a power-off, also after a sleep.** beta3's fix only
+  held until the first sleep: waking didn't take the PMIC's sleep line back off, so the
+  asleep-too-long power-off still needed a long press. The board's device tree now sets the line
+  back each time the device wakes and before it powers off.
+
 ## 0.1.0-beta3
 
 Help on the device, folders of games, and fixes for powering off and back on.

@@ -715,8 +715,13 @@
 		 * "sleep" state, which rk8xx_suspend() selects (SoC patch
 		 * 0005): routed there at power-off too, the PMIC no longer
 		 * started from the power key, only after a long press.
+		 * "default" names the pin too (pmic_sleep_gpio, a GPIO driven
+		 * low, as the stock firmware's pmic-power-off state has it):
+		 * pinctrl leaves a pin a new state doesn't name as it was, so
+		 * without it the first suspend left the pin on pmic_sleep for
+		 * every later power-off.
 		 */
-		pinctrl-0 = <&i2s1m0_mclk &pmic_int_l>;
+		pinctrl-0 = <&i2s1m0_mclk &pmic_int_l &pmic_sleep_gpio>;
 		pinctrl-1 = <&i2s1m0_mclk &pmic_int_l &pmic_sleep>;
 		pinctrl-names = "default", "sleep";
 		#sound-dai-cells = <0>;
@@ -1155,6 +1160,11 @@
 		pmic_sleep: pmic-sleep {
 			rockchip,pins =
 				<0 RK_PA2 1 &pcfg_pull_none>;
+		};
+
+		pmic_sleep_gpio: pmic-sleep-gpio {
+			rockchip,pins =
+				<0 RK_PA2 RK_FUNC_GPIO &pcfg_output_low>;
 		};
 	};
 

@@ -173,6 +173,17 @@ the default state it is a plain GPIO. Tested 2026-11-10 with kernel #9 (that pat
 it (power-on source 0x80). Deep sleep with the pin muxed only in suspend: 48 mA over 606 s by
 the coulomb counter, as before (48.7 mA muxed all the time), so the PMIC still sleeps.
 
+**...but only until the first sleep (beta3).** On 2026-11-11 the asleep-too-long power-off after a
+60-minute sleep again needed a long press. Reading `PMU_GRF_GPIO0A_IOMUX_L` (0xfdc20000, bits
+10:8 for A2) through /dev/mem: 0 (GPIO) after boot, 1 (`pmic_sleep`) after one suspend and
+resume, and it stayed 1. Switching pinctrl states only sets the pins the new state names, and
+the default state didn't name GPIO0_A2, so `rk8xx_resume` and `rk8xx_shutdown` selecting it
+left the pin muxed: every power-off after a sleep was the old one. The 2026-11-10 tap test passing
+was luck. The default state now names the pin (`pmic_sleep_gpio`: a GPIO driven low, the stock
+tree's `pmic-power-off` setting). Tested 2026-11-11 with kernel #9 and that DTB in slot B: mux 0
+after a suspend and resume; `nib sleep off-after 1`, the device powered off by itself and a short
+press started it (power-on source 0x80).
+
 **The stock TF-A configuration hangs.** The vendor kernel hands TF-A a sleep mode over
 `SIP_SUSPEND_MODE` (0x82000003); the stock DTB's 0x5ec is CENTER_OFF, ARMOFF_LOGOFF, PMIC_LP,
 HW_PLLS_OFF, PMUALIVE_32K, OSC_DIS and 32K_PVTM, with GPIO as the only wake source. Sent as is
