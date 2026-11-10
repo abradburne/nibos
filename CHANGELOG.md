@@ -11,7 +11,7 @@ Help on the device, folders of games, and fixes for powering off and back on.
   folders stay off it, and a leading `_` isn't shown); Select + A starts a game from the
   beginning, its resume point set aside as `.before-fresh` rather than deleted; B never starts
   a game.
-- **nibcase 0.3.1**: a BIOS named another way (`SCPH-5501.BIN`) is found; Clear resume state
+- **nibcase 0.3.2**: a BIOS named another way (`SCPH-5501.BIN`) is found; Clear resume state
   works for every nibcase core; PlayStation playlists that name discs from the card's root
   play.
 - **The power key starts the device again after a power-off.** Since beta1 the DS+ often
