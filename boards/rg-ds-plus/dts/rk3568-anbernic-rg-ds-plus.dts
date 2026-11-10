@@ -711,10 +711,14 @@
 		 * pmic_sleep: GPIO0_A2 as the PMU's sleep output, which the
 		 * RK817's SLEEP pin (and the SYR827's VSEL) follow. Without it
 		 * the PMIC never enters its sleep state in deep sleep and the
-		 * regulator-state-mem tables below do nothing.
+		 * regulator-state-mem tables below do nothing. Only in the
+		 * "sleep" state, which rk8xx_suspend() selects (SoC patch
+		 * 0005): routed there at power-off too, the PMIC no longer
+		 * started from the power key, only after a long press.
 		 */
-		pinctrl-0 = <&i2s1m0_mclk &pmic_int_l &pmic_sleep>;
-		pinctrl-names = "default";
+		pinctrl-0 = <&i2s1m0_mclk &pmic_int_l>;
+		pinctrl-1 = <&i2s1m0_mclk &pmic_int_l &pmic_sleep>;
+		pinctrl-names = "default", "sleep";
 		#sound-dai-cells = <0>;
 		system-power-controller;
 		wakeup-source;

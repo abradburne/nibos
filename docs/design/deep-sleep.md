@@ -97,7 +97,10 @@ away either way.
   race every time: on 2026-10-28 the device, lid closed all night, woke each hour, had its
   power-off refused ("Action suspend already in progress") and slept again, from 100% to 26%.
   The inhibitor, taken before logind comes round, keeps it from suspending, and the retries
-  wait out the suspend that is finishing.
+  wait out the suspend that is finishing. Taking the inhibitor can itself be refused while that
+  suspend runs (`Failed to inhibit: The operation inhibition has been requested for is already
+  running`): on 2026-11-09 the device woke each hour, the service failed at once, and it slept
+  again. The service now retries the inhibitor as well, every 0.5 s for 30 s.
 
 ## Tested
 
@@ -151,8 +154,24 @@ which the PMU does through GPIO0_A2's `pmic_sleep` function during TF-A's suspen
 this board's device tree derives from never muxes the SoC pin (`pinctrl` showed it "MUX
 UNCLAIMED"), so the pin stayed a floating GPIO and the whole table was inert. The stock tree muxes
 it in its `pmic-sleep` pinctrl state; mainline's PineNote muxes it in its default state, which is
-what nibOS now does (the `pmic_sleep` node in the board's pinctrl, in the rk817's `pinctrl-0`).
+what nibOS did first (the `pmic_sleep` node in the board's pinctrl, in the rk817's `pinctrl-0`).
 Worth 4-8 mA, and the regulator table now means what it says.
+
+**Muxed all the time, the power key stopped starting the device after a power-off.** From
+2026-10-29 every power-off (seen after the asleep-too-long one, three nights running) left the
+DS+ dark and deaf to a press of the power key: only a long press, which resets the RK817, brought
+it back. The RK817's `OFF_SOURCE` (0xf6) doesn't tell the two apart: it read 0x08 after a
+long press and after a clean power-off alike (0x04 after another long press). Reproduced on
+2026-11-10 with `nib sleep off-after 1`: a tap did nothing. The same power-off with GPIO0_A2 left unmuxed
+(a test DTB, everything else equal) started again from a tap. The stock tree muxes the pin only
+in its `pmic-sleep` state, and at power-off selects `pmic-power-off` (the pin back to a GPIO). So
+does nibOS now: the pin is in the rk817's `sleep` pinctrl state (`pinctrl-1`), which
+`rk8xx_suspend` selects and `rk8xx_resume` and `rk8xx_shutdown` undo (kernel `rk3568/0005`); in
+the default state it is a plain GPIO. Tested 2026-11-10 with kernel #9 (that patch, the board's
+`pinctrl-1`): `nib sleep off-after 1`, `systemctl suspend`, the alarm woke it, it powered off
+(`poweroff requested ... (unit nibos-sleep-off.service)`), and a tap of the power key started
+it (power-on source 0x80). Deep sleep with the pin muxed only in suspend: 48 mA over 606 s by
+the coulomb counter, as before (48.7 mA muxed all the time), so the PMIC still sleeps.
 
 **The stock TF-A configuration hangs.** The vendor kernel hands TF-A a sleep mode over
 `SIP_SUSPEND_MODE` (0x82000003); the stock DTB's 0x5ec is CENTER_OFF, ARMOFF_LOGOFF, PMIC_LP,

@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Tue, 10 Nov 2026 20:20:00 +0900
+Subject: [PATCH 5/5] mfd: rk8xx: route the sleep pin only while suspended
+
+On the RG DS+ the RK817's SLEEP pin follows the SoC's PMU sleep output
+(GPIO0_A2) once that pin is muxed to it, which deep sleep needs: without
+it the PMIC never enters its sleep state and the regulators'
+regulator-state-mem settings do nothing. Muxed there all the time (in the
+"default" pinctrl state), a power-off leaves the PMIC so that the power
+key no longer starts the device; only a long press, which resets the
+PMIC, brings it back. Reproduced twice with nibOS's power-off after a
+deep sleep; the same power-off with the pin left unmuxed starts again
+from a short press.
+
+Select a "sleep" pinctrl state in rk8xx_suspend() and go back to
+"default" in rk8xx_resume() and before shutdown, as the vendor kernel's
+pmic-sleep and pmic-power-off states do. Boards without a "sleep" state
+are unaffected (pinctrl_pm_select_sleep_state() does nothing).
+
+Upstream status: candidate.
+---
+ drivers/mfd/rk8xx-core.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/drivers/mfd/rk8xx-core.c b/drivers/mfd/rk8xx-core.c
+--- a/drivers/mfd/rk8xx-core.c
++++ b/drivers/mfd/rk8xx-core.c
+@@ -15,6 +15,7 @@
+ #include <linux/mfd/rk808.h>
+ #include <linux/mfd/core.h>
+ #include <linux/module.h>
++#include <linux/pinctrl/consumer.h>
+ #include <linux/property.h>
+ #include <linux/regmap.h>
+ #include <linux/reboot.h>
+@@ -738,6 +739,13 @@
+ 	struct rk808 *rk808 = dev_get_drvdata(dev);
+ 	int ret;
+ 
++	/*
++	 * Take the SoC's sleep output off the SLEEP pin before powering off:
++	 * routed there at power-off, the RK817 is left in a state the power
++	 * key can't start it from, and only a long press resets it.
++	 */
++	pinctrl_pm_select_default_state(dev);
++
+ 	switch (rk808->variant) {
+ 	case RK805_ID:
+ 		ret = regmap_update_bits(rk808->regmap,
+@@ -929,6 +937,15 @@
+ 		break;
+ 	}
+ 
++	/*
++	 * Route the SoC's sleep output to the SLEEP pin (the "sleep" pinctrl
++	 * state) only while suspended, as the vendor kernel does, so the
++	 * PMIC's sleep function and regulator-state-mem settings apply in deep
++	 * sleep without the pin staying routed through a power-off.
++	 */
++	if (!ret)
++		ret = pinctrl_pm_select_sleep_state(dev);
++
+ 	return ret;
+ }
+ EXPORT_SYMBOL_GPL(rk8xx_suspend);
+@@ -938,6 +955,8 @@
+ 	struct rk808 *rk808 = dev_get_drvdata(dev);
+ 	int ret = 0;
+ 
++	pinctrl_pm_select_default_state(dev);
++
+ 	switch (rk808->variant) {
+ 	case RK809_ID:
+ 	case RK817_ID:

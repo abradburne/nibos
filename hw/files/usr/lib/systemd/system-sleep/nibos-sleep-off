@@ -58,11 +58,19 @@ post)
             echo "nibos-sleep-off: asleep the set time on battery: powering off"
             # The inhibitor is held from the moment the service starts, before logind's lid
             # handling comes round again; poweroff is retried while the suspend is finishing.
+            # systemd-inhibit itself is refused while that suspend runs ("The operation
+            # inhibition has been requested for is already running"), so it is retried too: on
+            # 2026-11-09 that refusal let the device sleep again every hour.
             # shellcheck disable=SC2016 # expanded by the service's own shell
             systemd-run --no-block --quiet --collect --unit=nibos-sleep-off \
-                systemd-inhibit --what=sleep:handle-lid-switch --mode=block \
-                --who=nibos-sleep-off --why="powering off after sleeping too long" \
-                sh -c 'for i in $(seq 60); do systemctl poweroff && exit 0; sleep 0.5; done; exit 1'
+                sh -c 'for i in $(seq 60); do
+                    systemd-inhibit --what=sleep:handle-lid-switch --mode=block \
+                        --who=nibos-sleep-off --why="powering off after sleeping too long" \
+                        sh -c "for j in \$(seq 60); do systemctl poweroff && exit 0; sleep 0.5; done; exit 1" &&
+                        exit 0
+                    sleep 0.5
+                done
+                exit 1'
         fi
     else
         # Woken early (or plugged in): our alarm must not fire later.

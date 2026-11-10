@@ -11,6 +11,13 @@
 - **DSlot 0.7.0**: folders of games on the shelf (A opens one, B comes back out); Select + A
   starts a game from the beginning, its resume point set aside as `.before-fresh` rather than
   deleted; B never starts a game.
+- **The power key starts the device again after a power-off.** Since beta1 the DS+ often
+  stayed dark after powering off (the asleep-too-long power-off included) until the power key
+  was held for a long reset. The PMIC's sleep line is now routed only while asleep (kernel
+  `rk3568/0005`, with the board's device tree), so a tap starts it.
+- **Asleep too long, the device really powers off.** The power-off could be refused while the
+  wake that started it was finishing, and the device went back to sleep each hour all night; it
+  now retries.
 
 ## 0.1.0-beta2
 
