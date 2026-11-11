@@ -2,7 +2,8 @@
 //!
 //! - At the warning lines it leaves a notice for the shelf (`/run/nibos/notice/battery`,
 //!   which DSlot shows), says the level to apps in [`ALERT_PATH`] (`warn 9`, `low 5`), and
-//!   blinks the board's low-battery LED (`NIBOS_LOW_BATTERY_LED`), faster when low.
+//!   blinks the board's low-battery LED (`NIBOS_LOW_BATTERY_LED`), faster when low, with the
+//!   power LED (`NIBOS_POWER_LED`) off meanwhile.
 //! - At the shutdown line it powers the device off: systemd asks every program to quit with
 //!   SIGTERM, on which a running game saves its resume state, and the cards are unmounted
 //!   cleanly.
@@ -65,37 +66,52 @@ fn write_in_place(path: &str, text: &str) {
     }
 }
 
-/// The low-battery LED, if the board has one: blinking for a warning, on for the end.
-struct Led(Option<String>);
+/// The low-battery LED, if the board has one: blinking for a warning, on for the end. The
+/// power LED (`NIBOS_POWER_LED`), if named, goes off meanwhile: on the RG DS+ both are in one
+/// package, and a short red blink next to a steady green was easy to miss.
+struct Led {
+    low: Option<String>,
+    power: Option<String>,
+}
+
+fn put(name: &str, file: &str, v: &str) {
+    let path = format!("/sys/class/leds/{name}/{file}");
+    if let Err(e) = fs::write(&path, v) {
+        eprintln!("nibos-battery: {path}: {e}");
+    }
+}
 
 impl Led {
     fn set(&self, level: Level) {
-        let Some(name) = &self.0 else { return };
-        let dir = format!("/sys/class/leds/{name}");
-        let put = |file: &str, v: &str| {
-            if let Err(e) = fs::write(format!("{dir}/{file}"), v) {
-                eprintln!("nibos-battery: {dir}/{file}: {e}");
+        if let Some(power) = &self.power {
+            match level {
+                Level::Ok => put(power, "trigger", "default-on"),
+                _ => {
+                    put(power, "trigger", "none");
+                    put(power, "brightness", "0");
+                }
             }
-        };
+        }
+        let Some(name) = &self.low else { return };
         let blink = |on_ms: &str, off_ms: &str| {
             // The timer trigger makes delay_on and delay_off appear; without it, steady on.
-            if fs::write(format!("{dir}/trigger"), "timer").is_ok() {
-                put("delay_on", on_ms);
-                put("delay_off", off_ms);
+            if fs::write(format!("/sys/class/leds/{name}/trigger"), "timer").is_ok() {
+                put(name, "delay_on", on_ms);
+                put(name, "delay_off", off_ms);
             } else {
-                put("brightness", "1");
+                put(name, "brightness", "1");
             }
         };
         match level {
             Level::Ok => {
-                put("trigger", "none");
-                put("brightness", "0");
+                put(name, "trigger", "none");
+                put(name, "brightness", "0");
             }
-            Level::Warn => blink("200", "2800"),
-            Level::Low => blink("200", "800"),
+            Level::Warn => blink("1000", "1000"),
+            Level::Low => blink("250", "250"),
             Level::Critical => {
-                put("trigger", "none");
-                put("brightness", "1");
+                put(name, "trigger", "none");
+                put(name, "brightness", "1");
             }
         }
     }
@@ -118,10 +134,11 @@ fn main() {
     let local = fs::read_to_string(LOCAL_PATH).unwrap_or_default();
     let env = parse_env(&format!("{text}\n{local}"));
     let limits = Limits::from_env(&env).unwrap_or_else(|e| fail(format!("{PATH}: {e}")));
-    let led = Led(env
-        .get("NIBOS_LOW_BATTERY_LED")
-        .filter(|v| !v.is_empty())
-        .cloned());
+    let named = |key: &str| env.get(key).filter(|v| !v.is_empty()).cloned();
+    let led = Led {
+        low: named("NIBOS_LOW_BATTERY_LED"),
+        power: named("NIBOS_POWER_LED"),
+    };
     let mut policy = Policy::new(limits);
 
     if std::env::args().nth(1).as_deref() == Some("--once") {
