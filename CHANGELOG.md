@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **A low-battery warning and a safe power-off.** At 10% and again at 5% a notice comes up on
+  the shelf and the red LED blinks, faster when low; apps can read the level from
+  `/run/nibos/battery-alert`. At 2%, or with the cell at or under 3.45 V for three readings in a
+  row, the device powers itself off, and a running game saves and quits on the way, as from the
+  power menu. Plugging in the charger clears it. The limits are the board's
+  (`NIBOS_BATTERY_*`).
 - **The power key starts the device after a power-off, also after a sleep.** beta3's fix only
   held until the first sleep: waking didn't take the PMIC's sleep line back off, so the
   asleep-too-long power-off still needed a long press. The board's device tree now sets the line

@@ -92,7 +92,8 @@ this is the USB-C port, and that a computer enumerates it.
 - **Deeper CPU idle**: the cores only ever WFI today (no cpuidle driver). PSCI idle states in
   the device tree, if TF-A takes `CPU_SUSPEND`, measured against the idle draw
   ([idle-power.md](engineering/idle-power.md)).
-- **Low-battery warning and safe shutdown** before the battery cuts out.
+- **Low-battery warning and safe shutdown**: done (`nibos-battery`). Left: toasts over a game
+  in the emulators (nibkit `battery::Alerts`), and the 3.45 V line checked by a drain to empty.
 - **Hibernation** (suspend to disk), in place of the power-off after `nib sleep off-after`:
   asleep that long, the device writes its memory to the card and turns off, drawing nothing,
   and comes back exactly where it was, outside a game too. Deep sleep has nothing lower on this

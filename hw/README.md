@@ -125,6 +125,23 @@ wheel group may; kept in `/var/lib/nibos/battery/protect` and set again by udev 
 in.
 [docs/engineering/battery.md](../docs/engineering/battery.md).
 
+**Low battery.** `nibos-battery` (system service) reads the battery every 30 s, and every 5 s
+near the end, while the device runs from it. The lines are `NIBOS_BATTERY_*` in `board.conf`
+(on the RG DS+, 10%, 5%, and a shutdown at 2% or 3.45 V):
+
+- **10% and 5%**: a notice on the shelf (`/run/nibos/notice/battery`, which DSlot shows), the
+  level for apps in `/run/nibos/battery-alert` (`warn 9`, `low 5`; nibkit's
+  `battery::Alerts` shows it over a game as a toast), and the red LED (`NIBOS_LOW_BATTERY_LED`)
+  blinking, faster at 5%.
+- **The shutdown line**, for 3 readings in a row (the voltage sags under load and recovers):
+  `systemctl poweroff`. systemd stops DSlot's service with SIGTERM, on which a running game
+  saves its resume state and quits, and the cards are unmounted cleanly.
+- **Plugging the charger in** clears all of it at once.
+
+`nibos-battery --once` prints a reading and what the policy makes of it, without acting. The
+stock firmware powers off at 3.40 V (its `power_off_thresd`), the OCV table's 0%; the 3.45 V
+line leaves 50 mV for the sag. It still has to be checked against a drain to empty.
+
 **Brightness.** Each screen has its own backlight, and nibOS offers them to programs as two
 named, unprivileged knobs (the first case of nibOS's [device interface](../docs/engineering/device-interface.md)):
 
@@ -250,4 +267,5 @@ charging detected (+1.17 A from a wall charger); lid and power-key sleep and wak
 back on its own.
 
 Not yet: headphone plug/unplug switching (needs headphones), rumble through the merged
-gamepad, battery-low shutdown, sleep drain over hours, the cause of the OHCI suspend hang.
+gamepad, the low-battery warnings and power-off (`nibos-battery`, written 2026-11-11 with the
+device offline), sleep drain over hours, the cause of the OHCI suspend hang.

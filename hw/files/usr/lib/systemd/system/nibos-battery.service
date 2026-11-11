@@ -1,0 +1,14 @@
+# nibos-hw: the low battery (/usr/bin/nibos-battery, hw/daemons): warnings on the shelf, to
+# apps (/run/nibos/battery-alert) and on the low-battery LED, and a clean power-off before
+# the battery cuts out. The lines are NIBOS_BATTERY_* in /usr/lib/nibos/board.conf.
+# Enabled by the package.
+[Unit]
+Description=Low battery warning and safe power-off
+
+[Service]
+ExecStart=/usr/bin/nibos-battery
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

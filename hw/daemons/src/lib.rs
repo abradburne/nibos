@@ -12,6 +12,8 @@
 //!   the volume keys, and the Menu + volume brightness shortcut;
 //! - [`backlight`]: the screens' backlights by name, in percent, with a floor
 //!   and saved levels (`nibos-backlight`, `nibos-input`);
+//! - [`battery`]: the low battery: warnings, and powering off before it cuts out
+//!   (`nibos-battery`);
 //! - [`power`]: the power key: a tap sleeps, a hold asks for the power menu;
 //! - [`charge`]: charging asleep when the charger switched the device on (`nibos-charge-boot`);
 //! - [`audio`]: how `nibos-audio` picks sinks and reads PipeWire's tools;
@@ -26,6 +28,7 @@
 pub mod ab;
 pub mod audio;
 pub mod backlight;
+pub mod battery;
 pub mod board;
 pub mod charge;
 pub mod controls;
