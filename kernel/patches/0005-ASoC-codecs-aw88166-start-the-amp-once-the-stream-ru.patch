@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alan Bradburne <abradburne@gmail.com>
 Date: Tue, 20 Oct 2026 11:10:00 +0900
-Subject: [PATCH] ASoC: codecs: aw88166: start the amp once the stream runs
+Subject: [PATCH 5/6] ASoC: codecs: aw88166: start the amp once the stream runs
 
 The amp locks its PLL to the I2S bit clock. The driver starts it from the
 DAPM PRE_PMU event, in a work queued with no delay, which can run before
@@ -27,13 +27,14 @@ starts the amp, but only while the DAPM widget is still powered.
 
 Upstream status: candidate.
 ---
- sound/soc/codecs/aw88166.c | 50 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ sound/soc/codecs/aw88166.c | 50 ++++++++++++++++++++++++++++++++++++++
  1 file changed, 50 insertions(+)
 
 diff --git a/sound/soc/codecs/aw88166.c b/sound/soc/codecs/aw88166.c
+index d2a138211c59..a6fa232f245d 100644
 --- a/sound/soc/codecs/aw88166.c
 +++ b/sound/soc/codecs/aw88166.c
-@@ -23,6 +23,7 @@
+@@ -23,6 +23,7 @@ struct aw88166 {
  	struct mutex lock;
  	struct gpio_desc *reset_gpio;
  	struct delayed_work start_work;
@@ -41,7 +42,7 @@ diff --git a/sound/soc/codecs/aw88166.c b/sound/soc/codecs/aw88166.c
  	struct regmap *regmap;
  	struct aw_container *aw_cfg;
  
-@@ -32,6 +33,7 @@
+@@ -32,6 +33,7 @@ struct aw88166 {
  	unsigned int re_init_val;
  	unsigned int dither_st;
  	bool phase_sync;
@@ -49,14 +50,10 @@ diff --git a/sound/soc/codecs/aw88166.c b/sound/soc/codecs/aw88166.c
  };
  
  static const struct regmap_config aw88166_remap_config = {
-@@ -1250,14 +1252,58 @@
- 	}
+@@ -1254,10 +1256,54 @@ static int aw88166_stop(struct aw_device *aw_dev)
+ 	return 0;
+ }
  
- 	aw_dev_pwd(aw_dev, true);
-+
-+	return 0;
-+}
-+
 +static void aw88166_trigger_work(struct work_struct *work)
 +{
 +	struct aw88166 *aw88166 =
@@ -92,10 +89,10 @@ diff --git a/sound/soc/codecs/aw88166.c b/sound/soc/codecs/aw88166.c
 +	default:
 +		break;
 +	}
- 
- 	return 0;
- }
- 
++
++	return 0;
++}
++
 +static const struct snd_soc_dai_ops aw88166_dai_ops = {
 +	.trigger = aw88166_trigger,
 +};
@@ -108,7 +105,7 @@ diff --git a/sound/soc/codecs/aw88166.c b/sound/soc/codecs/aw88166.c
  		.playback = {
  			.stream_name = "Speaker_Playback",
  			.channels_min = 1,
-@@ -1637,9 +1683,11 @@
+@@ -1637,9 +1683,11 @@ static int aw88166_playback_event(struct snd_soc_dapm_widget *w,
  	guard(mutex)(&aw88166->lock);
  	switch (event) {
  	case SND_SOC_DAPM_PRE_PMU:
@@ -120,7 +117,7 @@ diff --git a/sound/soc/codecs/aw88166.c b/sound/soc/codecs/aw88166.c
  		aw88166_stop(aw88166->aw_pa);
  		break;
  	default:
-@@ -1672,6 +1720,7 @@
+@@ -1672,6 +1720,7 @@ static int aw88166_codec_probe(struct snd_soc_component *component)
  	int ret;
  
  	INIT_DELAYED_WORK(&aw88166->start_work, aw88166_startup_work);
@@ -128,7 +125,7 @@ diff --git a/sound/soc/codecs/aw88166.c b/sound/soc/codecs/aw88166.c
  
  	ret = aw88166_request_firmware_file(aw88166);
  	if (ret)
-@@ -1685,6 +1734,7 @@
+@@ -1685,6 +1734,7 @@ static void aw88166_codec_remove(struct snd_soc_component *aw_codec)
  	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(aw_codec);
  
  	cancel_delayed_work_sync(&aw88166->start_work);
@@ -136,6 +133,3 @@ diff --git a/sound/soc/codecs/aw88166.c b/sound/soc/codecs/aw88166.c
  }
  
  static const struct snd_soc_component_driver soc_codec_dev_aw88166 = {
--- 
-2.47.0
-

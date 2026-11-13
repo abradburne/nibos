@@ -22,7 +22,7 @@ Upstream status: candidate. Nothing in the driver depends on probe order.
  1 file changed, 7 insertions(+)
 
 diff --git a/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c b/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
-index b100b0482..e597a0c18 100644
+index b100b0482cd6..e597a0c18d37 100644
 --- a/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
 +++ b/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
 @@ -3454,6 +3454,13 @@ static struct mipi_dsi_driver jadard_driver = {

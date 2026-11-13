@@ -73,7 +73,7 @@ case "$SSH_KEY" in *.pub) SSH_KEY=${SSH_KEY%.pub} ;; esac
 # volume). kernel/build.sh refuses another commit unless KERNEL_COMMIT is
 # changed too: the patches are made against this one.
 : "${KSRC:=$HOME/linux}"
-: "${KERNEL_COMMIT:=0fcb05b72344f40806cbe810de8872f1698bf053}"   # v7.3-rc7, torvalds master
+: "${KERNEL_COMMIT:=7595a62d45ee1a2297eafa5f2ef5d0a45142d84d}"   # v7.3.4, stable (fetch tag v7.3.4 from linux-stable)
 
 # Mainline U-Boot and Rockchip's DDR init and TF-A binaries, also inside the
 # build machine; uboot/build.sh clones them at these versions if missing.

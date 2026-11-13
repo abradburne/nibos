@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alan Bradburne <abradburne@gmail.com>
 Date: Fri, 16 Oct 2026 12:20:38 +0900
-Subject: [PATCH 3/4] drm/rockchip: set up the fbdev client from a work item
+Subject: [PATCH 3/5] drm/rockchip: set up the fbdev client from a work item
 
 drm_client_setup() at the end of rockchip_drm_bind() runs the fbdev
 client's first modeset, which powers the panels on: on the RG DS+ the
@@ -22,7 +22,7 @@ as well, so this may be better solved in the DRM client code.
  2 files changed, 22 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/rockchip/rockchip_drm_drv.c b/drivers/gpu/drm/rockchip/rockchip_drm_drv.c
-index 3099408e9..a01bf0fb6 100644
+index 3099408e9d05..a01bf0fb600f 100644
 --- a/drivers/gpu/drm/rockchip/rockchip_drm_drv.c
 +++ b/drivers/gpu/drm/rockchip/rockchip_drm_drv.c
 @@ -142,6 +142,21 @@ static void rockchip_iommu_cleanup(struct drm_device *drm_dev)
@@ -76,7 +76,7 @@ index 3099408e9..a01bf0fb6 100644
  
  	drm_kms_helper_poll_fini(drm_dev);
 diff --git a/drivers/gpu/drm/rockchip/rockchip_drm_drv.h b/drivers/gpu/drm/rockchip/rockchip_drm_drv.h
-index 4705dc6b8..d4c4c29f1 100644
+index 4705dc6b8bd7..d4c4c29f1aae 100644
 --- a/drivers/gpu/drm/rockchip/rockchip_drm_drv.h
 +++ b/drivers/gpu/drm/rockchip/rockchip_drm_drv.h
 @@ -73,6 +73,8 @@ struct rockchip_drm_private {

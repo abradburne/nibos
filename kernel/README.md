@@ -1,6 +1,6 @@
 # Kernel
 
-Mainline Linux (7.3-rc7, `KERNEL_COMMIT` in `config.sh`) for the board in `NIBOS_BOARD`, with
+Mainline Linux (7.3.4 stable, `KERNEL_COMMIT` in `config.sh`) for the board in `NIBOS_BOARD`, with
 three sets of patches (generic, the SoC's, the board's), the board's device tree, and a
 configuration made from arm64's defconfig and three fragments. It is built natively in the build
 machine (an OrbStack Arch Linux ARM VM), not as a distribution package.

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alan Bradburne <abradburne@gmail.com>
 Date: Fri, 16 Oct 2026 12:20:38 +0900
-Subject: [PATCH 1/4] i2c/mfd/regulator: rk3x, rk8xx: register at
+Subject: [PATCH 1/5] i2c/mfd/regulator: rk3x, rk8xx: register at
  subsys_initcall
 
 The RG DS+ SD controllers need the RK817 PMIC for vqmmc, and the
@@ -28,7 +28,7 @@ deferred-probe retry timing are where a general fix would go.
  3 files changed, 48 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/i2c/busses/i2c-rk3x.c b/drivers/i2c/busses/i2c-rk3x.c
-index fcede9f6e..a0fb81e59 100644
+index fcede9f6ed54..a0fb81e59751 100644
 --- a/drivers/i2c/busses/i2c-rk3x.c
 +++ b/drivers/i2c/busses/i2c-rk3x.c
 @@ -1406,7 +1406,22 @@ static struct platform_driver rk3x_i2c_driver = {
@@ -56,7 +56,7 @@ index fcede9f6e..a0fb81e59 100644
  MODULE_DESCRIPTION("Rockchip RK3xxx I2C Bus driver");
  MODULE_AUTHOR("Max Schwarz <max.schwarz@online.de>");
 diff --git a/drivers/mfd/rk8xx-i2c.c b/drivers/mfd/rk8xx-i2c.c
-index 2951b2911..71eae416b 100644
+index 2951b2911a37..71eae416b702 100644
 --- a/drivers/mfd/rk8xx-i2c.c
 +++ b/drivers/mfd/rk8xx-i2c.c
 @@ -275,7 +275,22 @@ static struct i2c_driver rk8xx_i2c_driver = {
@@ -84,7 +84,7 @@ index 2951b2911..71eae416b 100644
  MODULE_LICENSE("GPL");
  MODULE_AUTHOR("Chris Zhong <zyw@rock-chips.com>");
 diff --git a/drivers/regulator/rk808-regulator.c b/drivers/regulator/rk808-regulator.c
-index 1e9561534..e4eb12f03 100644
+index 1e956153427e..e4eb12f03b0d 100644
 --- a/drivers/regulator/rk808-regulator.c
 +++ b/drivers/regulator/rk808-regulator.c
 @@ -2193,7 +2193,22 @@ static struct platform_driver rk808_regulator_driver = {
@@ -112,4 +112,4 @@ index 1e9561534..e4eb12f03 100644
  MODULE_DESCRIPTION("Rockchip RK80x/RK81x PMIC series regulator driver");
  MODULE_AUTHOR("Tony xie <tony.xie@rock-chips.com>");
 
-base-commit: 890ba68d38133061f470a7c4fa40db784ee0bd3d
+base-commit: a2932b8acc6322e32c480fe1021cab5b393438a9

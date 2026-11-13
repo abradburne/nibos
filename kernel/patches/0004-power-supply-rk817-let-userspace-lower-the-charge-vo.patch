@@ -1,7 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alan Bradburne <abradburne@gmail.com>
 Date: Mon, 19 Oct 2026 17:10:00 +0900
-Subject: [PATCH] power: supply: rk817: let userspace lower the charge voltage
+Subject: [PATCH 4/6] power: supply: rk817: let userspace lower the charge
+ voltage
 
 A handheld left on its charger keeps its battery full, which ages it
 fastest. The RK817 can't stop at a state of charge, but its charge voltage
@@ -28,7 +29,7 @@ Upstream status: candidate.
  1 file changed, 62 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/power/supply/rk817_charger.c b/drivers/power/supply/rk817_charger.c
-index 5558b18..81c0123 100644
+index 5558b182a1a6..81c01236de64 100644
 --- a/drivers/power/supply/rk817_charger.c
 +++ b/drivers/power/supply/rk817_charger.c
 @@ -95,6 +95,15 @@ struct rk817_charger {

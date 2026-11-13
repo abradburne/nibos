@@ -11,7 +11,7 @@ A patch is named by its tree, set and number: kernel `rk3568/0004` is
 "Board-specific hack" means a change that buys boot time on this hardware in a way the upstream
 project wouldn't take as it is; each such message says what a general fix would look like.
 
-## Linux (at `KERNEL_COMMIT`, v7.3-rc7)
+## Linux (at `KERNEL_COMMIT`, v7.3.4)
 
 | Patch | What | Why, as measured | Upstream |
 |---|---|---|---|

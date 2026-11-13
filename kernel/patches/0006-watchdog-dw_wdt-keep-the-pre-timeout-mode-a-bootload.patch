@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alan Bradburne <abradburne@gmail.com>
 Date: Sat, 24 Oct 2026 21:50:23 +0900
-Subject: [PATCH] watchdog: dw_wdt: keep the pre-timeout mode a bootloader left
- running
+Subject: [PATCH 6/6] watchdog: dw_wdt: keep the pre-timeout mode a bootloader
+ left running
 
 A bootloader that starts the watchdog in IRQ mode (a pre-timeout
 interrupt after the first TOP, the reset after the second) has it
@@ -34,7 +34,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  1 file changed, 34 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/watchdog/dw_wdt.c b/drivers/watchdog/dw_wdt.c
-index 39031445d..a7efb2ae4 100644
+index 39031445d754..a7efb2ae466f 100644
 --- a/drivers/watchdog/dw_wdt.c
 +++ b/drivers/watchdog/dw_wdt.c
 @@ -195,6 +195,21 @@ static int dw_wdt_ping(struct watchdog_device *wdd)
@@ -126,6 +126,3 @@ index 39031445d..a7efb2ae4 100644
  		set_bit(WDOG_HW_RUNNING, &wdd->status);
  	} else {
  		wdd->timeout = DW_WDT_DEFAULT_SECONDS;
--- 
-2.56.0
-

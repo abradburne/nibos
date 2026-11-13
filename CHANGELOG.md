@@ -15,6 +15,8 @@
   row, the device powers itself off, and a running game saves and quits on the way, as from the
   power menu. Plugging in the charger clears it. The limits are the board's
   (`NIBOS_BATTERY_*`).
+- **Linux 7.3.4.** The kernel moves from a 7.3 release candidate to the 7.3.4 stable release,
+  with the same patches and settings.
 - **Asleep too long, the device really powers off.** With the lid closed it went back to sleep
   about two seconds after each hourly wake, before the power-off logind had to accept could get
   through; the leftover power-off then blocked every later hour's, so the device slept on until

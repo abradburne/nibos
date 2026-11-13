@@ -2,7 +2,7 @@
 
 The patches every nibOS kernel gets, whatever the board, applied by
 [`../build.sh`](../build.sh) on top of mainline Linux at `KERNEL_COMMIT` (`config.sh`;
-v7.3-rc7), before the SoC's (`socs/<soc>/kernel/patches/`) and the board's
+v7.3.4), before the SoC's (`socs/<soc>/kernel/patches/`) and the board's
 (`boards/<board>/kernel/patches/`). GPL-2.0, like the kernel.
 
 | # | Patch | Upstream status |

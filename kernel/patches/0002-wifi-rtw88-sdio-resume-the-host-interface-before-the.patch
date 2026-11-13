@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alan Bradburne <abradburne@gmail.com>
 Date: Sun, 18 Oct 2026 10:50:20 +0900
-Subject: [PATCH 2/3] wifi: rtw88: sdio: resume the host interface before the
+Subject: [PATCH 2/6] wifi: rtw88: sdio: resume the host interface before the
  first MAC access
 
 In SDIO 3.0 (UHS) mode rtw88 reaches the MAC registers through the
@@ -30,7 +30,7 @@ Upstream status: candidate.
  1 file changed, 28 insertions(+)
 
 diff --git a/drivers/net/wireless/realtek/rtw88/sdio.c b/drivers/net/wireless/realtek/rtw88/sdio.c
-index 5b40d74b1..14d9105e4 100644
+index 5b40d74b16ee..14d9105e41e4 100644
 --- a/drivers/net/wireless/realtek/rtw88/sdio.c
 +++ b/drivers/net/wireless/realtek/rtw88/sdio.c
 @@ -680,6 +680,28 @@ static void rtw_sdio_init(struct rtw_dev *rtwdev)

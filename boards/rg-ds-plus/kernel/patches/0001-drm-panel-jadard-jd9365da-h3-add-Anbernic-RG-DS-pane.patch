@@ -22,7 +22,7 @@ anbernic,rg-ds-plus-display-top and -bottom) to go with it.
  1 file changed, 117 insertions(+)
 
 diff --git a/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c b/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
-index 5202c1ffc..b100b0482 100644
+index 5202c1ffc6e1..b100b0482cd6 100644
 --- a/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
 +++ b/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
 @@ -1361,6 +1361,115 @@ static const struct jadard_panel_desc anbernic_rgds_display_desc = {
@@ -157,4 +157,4 @@ index 5202c1ffc..b100b0482 100644
  		.compatible = "chongzhou,cz101b4001",
  		.data = &cz101b4001_desc
 
-base-commit: 9fa3033012b207a5a00a0c71e950cbf3a02a8764
+base-commit: 80259278dc8e8900783c4a417078f9c668a633f5

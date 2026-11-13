@@ -30,7 +30,7 @@ to work; the prepare/enable split alone could be proposed.
  1 file changed, 86 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c b/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
-index e597a0c18..8ee92f9b4 100644
+index e597a0c18d37..8ee92f9b495f 100644
 --- a/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
 +++ b/drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
 @@ -31,7 +31,9 @@ struct jadard_panel_desc {

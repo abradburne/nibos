@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alan Bradburne <abradburne@gmail.com>
 Date: Fri, 16 Oct 2026 12:20:38 +0900
-Subject: [PATCH 2/4] mmc: dw_mmc-rockchip: use a short data timeout while
+Subject: [PATCH 2/5] mmc: dw_mmc-rockchip: use a short data timeout while
  tuning
 
 SDR104 tuning of the RG DS+ root card took 0.03-0.51 s, varying from boot
@@ -21,7 +21,7 @@ Upstream status: candidate.
  1 file changed, 42 insertions(+)
 
 diff --git a/drivers/mmc/host/dw_mmc-rockchip.c b/drivers/mmc/host/dw_mmc-rockchip.c
-index 75c82ff20..58ec09263 100644
+index 75c82ff20f17..58ec09263c6b 100644
 --- a/drivers/mmc/host/dw_mmc-rockchip.c
 +++ b/drivers/mmc/host/dw_mmc-rockchip.c
 @@ -38,6 +38,7 @@ struct dw_mci_rockchip_priv_data {
