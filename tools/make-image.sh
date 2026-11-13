@@ -75,9 +75,10 @@ if [ "$edition" = dslot ]; then
   PCSX ReARMed: their licences are in the package list below.
 - inktick (Game & Watch, a preview) at $(commit "${INKTICK_SRC:-$parent/inktick}"): MIT OR Apache-2.0.
 - Roboto Condensed (in DSlot and the emulators' menus): SIL OFL 1.1.
-- GBA DS 1.5 (GBA games with a second screen; its aarch64 Linux release, as published):
-  GPL-3.0-only, with libmgba (MPL-2.0) and rcheevos (MIT) linked in and the Jost font (OFL 1.1);
-  nibOS's launcher for it GPL-3.0-or-later. Its source, and mGBA's, are in the source release.
+- GBA DS 1.5 (GBA games with a second screen), built from nibOS's fork (abradburne/gba-ds,
+  branch nibos): GPL-3.0-only, with libmgba (MPL-2.0), rcheevos (MIT) and nibkit's menu (MIT)
+  linked in and the Jost font (OFL 1.1); nibOS's launcher for it GPL-3.0-or-later. Its source,
+  and mGBA's, are in the source release.
 - nibOS's PortMaster package: portmaster-get and the launchers (GPL-3.0-or-later) and the
   nibOS profile (MIT). PortMaster is downloaded on request from github.com/PortsMaster; not
   included. It and what it downloads come under their own licences.
@@ -114,7 +115,7 @@ if ! python3 "$here/whats-new.py" "$NIBOS_ROOT/CHANGELOG.md" "$version" > "$work
     rm -f "$work/docs/whats-new.txt"
 fi
 
-# nibkit (NIBKIT_REPO at NIBKIT_TAG), for its licences and for DSperate's pause menu and inktick,
+# nibkit (NIBKIT_REPO at NIBKIT_TAG), for its licences and for DSperate's and GBA DS's pause menu and inktick,
 # laid out the way their PKGBUILDs look for it (_nibkit=, NIBKIT=): nibkit with a LICENSE, and
 # nibkit-menu-c beside it, each standing alone. DSlot, inkdot and nibcase take nibkit and
 # nib-cheevos at the tags their Cargo.lock pins.
@@ -160,7 +161,7 @@ if [ "$edition" = dslot ]; then
         for c in beetle-ngp beetle-wswan gearsystem gw handy pcsx-rearmed ppsspp fbneo picodrive; do (cd '$nibcase/packaging/cores/'\$c && $mk); done
         cd '$inktick/packaging/nibos' && NIBKIT='$nibkit/nibkit' $mk
         cd '$NIBOS_ROOT/rootfs/portmaster' && $mk
-        cd '$NIBOS_ROOT/rootfs/gba-ds' && $mk
+        cd '$NIBOS_ROOT/rootfs/gba-ds' && _nibkit='$nibkit/nibkit-menu-c' $mk
         cd '$NIBOS_ROOT/rootfs/readahead' && mkdir -p out && gcc -O2 -static -o out/nibos-readahead readahead.c
         cd '$NIBOS_ROOT/rootfs/safe-mode' && cargo build --release --quiet
         rm -rf \$HOME/nibos-image-build" >/dev/null

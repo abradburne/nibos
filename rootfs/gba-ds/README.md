@@ -7,7 +7,7 @@ for (DSlot's `docs/gba-ds.md`).
 
 | Where | What |
 |---|---|
-| `/usr/lib/gba-ds/gba-ds` | GBA DS's own aarch64 Linux release build, unchanged ([PKGBUILD](PKGBUILD): version and SHA-256) |
+| `/usr/lib/gba-ds/gba-ds` | GBA DS 1.5 built from nibOS's fork, with nibOS's pause menu ([PKGBUILD](PKGBUILD): the commit and SHA-256) |
 | [`/usr/lib/gba-ds/run-game`](files/usr/lib/gba-ds/run-game) `[options] <game> <saves folder>` | Starts one game as nibOS needs: what DSlot runs |
 | [`/usr/share/dslot/emulators/gba-ds.toml`](files/usr/share/dslot/emulators/gba-ds.toml) | DSlot's description: the `GBADS` system, three options, "Clear resume state" |
 | `Saves/GBADS/<game>/` | The game's battery save (`.sav`), resume point (`.auto.state`) and save states |
@@ -25,16 +25,16 @@ the RG DS+ on 12 Nov 2026):
   as HOME unless told: `--home-button=10`. run-game also asks for nibOS's own pause menu on
   Back (`--menu=nibkit --back-button=menu`), Menu to save the resume point and quit
   (`--home-button-action=quit`) and no swipe-up quick bar (`--quick-bar=0`). Those options are
-  in the `nibos` branch of abradburne/gba-ds, not yet in a release: the 1.5 release warns about
-  them, ignores them, and opens its own menu with Menu.
+  in nibOS's fork (the `nibos` branch of abradburne/gba-ds), which the package builds; they are
+  offered upstream.
 - **Touch:** read straight from the touchscreen's device, as the bottom panel's own.
 - **No bezels** (`--overlays=off`) and **no update check**: the package is how it is updated.
 - **SIGTERM** (DSlot's power menu, shutdown): GBA DS saves the resume point and exits.
 
 ## Licences and source
 
-GBA DS is GPL-3.0-only. It links libmgba (MPL-2.0) and rcheevos (MIT) statically and draws its
-text in Jost (OFL-1.1); their licences are in `/usr/share/licenses/gba-ds/`. Besides the
-release zip, the PKGBUILD names the source it was built from (GBA DS at the tag and mGBA at the
-commit its `scripts/mgba-options.sh` pins). `tools/collect-sources.py` archives them with the
-rest of a release's source.
+GBA DS is GPL-3.0-only. It links libmgba (MPL-2.0), rcheevos (MIT) and nibkit's menu (MIT, its
+face Roboto Condensed OFL-1.1) statically and draws its own text in Jost (OFL-1.1); their
+licences are in `/usr/share/licenses/gba-ds/`. The PKGBUILD builds from the fork's commit and
+the mGBA commit GBA DS's `scripts/mgba-options.sh` pins; `tools/collect-sources.py` archives
+them with the rest of a release's source.

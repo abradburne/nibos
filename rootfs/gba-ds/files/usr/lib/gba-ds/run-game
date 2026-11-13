@@ -16,7 +16,8 @@
 #   - GBA DS's other files (settings from its menus, cheats, overlays, screenshots) in
 #     ~/.local/share/gba-ds: /usr/lib/gba-ds is read-only to the user;
 #   - no looking for updates: the package is how GBA DS is updated here;
-#   - Menu as GBA DS's HOME button (its menu, and Menu + Start to quit), and no bezels.
+#   - Back pauses with nibOS's menu, Menu saves the resume point and quits (Menu is GBA DS's
+#     HOME button), no swipe-up quick bar and no bezels.
 # GBA DS replaces this script (exec), so DSlot's SIGTERM reaches it: it saves the resume
 # point and quits.
 set -u

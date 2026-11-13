@@ -478,7 +478,7 @@ def main():
                                 f"portmaster-{own[name]['version']}", {"NIBOS_ROOT": NIBOS})
             archive_of[name] = (path, "nibOS rootfs/portmaster")
         elif key == "gba-ds":
-            # The release zip, and GBA DS's and mGBA's source at what it was built from.
+            # GBA DS's (nibOS's fork) and mGBA's source at what the package builds.
             path = collect_tree(os.path.join(NIBOS, "rootfs/gba-ds"), files, srcdest,
                                 f"gba-ds-{own[name]['version']}", {"NIBOS_ROOT": NIBOS})
             archive_of[name] = (path, "nibOS rootfs/gba-ds (with GBA DS's and mGBA's source)")

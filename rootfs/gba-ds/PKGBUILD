@@ -1,64 +1,91 @@
 # gba-ds: GBA DS (https://github.com/kyannon/gba-ds), a Game Boy Advance emulator that shows a
 # game's map, HUD or status screen on the second screen, for DSlot's GBA DS page on nibOS.
 #
-# The program is GBA DS's own release build for aarch64 Linux, as published, checked against the
-# SHA-256 below. nibOS adds run-game, which starts a game as nibOS needs (both panels, Menu as
-# its HOME button, saves in the game's saves folder), and DSlot's description of it
-# (files/usr/share/dslot/emulators/gba-ds.toml).
+# Built from nibOS's fork (https://github.com/abradburne/gba-ds, branch nibos) at the commit
+# below: GBA DS 1.5 with nibOS's shared pause menu (nibkit-menu-c), Back to pause, Menu to save
+# the resume point and quit, and the screens the right way up (the fork's changes are offered
+# upstream). libmgba is built from the mGBA commit GBA DS pins (scripts/mgba-options.sh) with
+# GBA DS's own options, and linked statically, as GBA DS's release does. nibOS adds run-game,
+# which starts a game as nibOS needs (both panels, Back and Menu, saves in the game's saves
+# folder), and DSlot's description of it (files/usr/share/dslot/emulators/gba-ds.toml).
 #
-# The release links libmgba statically (MPL-2.0). For the GPL's source offer, the package names
-# the source the release was built from as well: GBA DS at the release's tag and mGBA at the
-# commit it pins (scripts/mgba-options.sh in GBA DS). makepkg fetches and checks them, nothing
-# builds from them, and tools/collect-sources.py archives every source the PKGBUILD names.
+# The pause menu needs nibkit's nibkit-menu-c: _nibkit names it, laid out as make-image lays it
+# out (nibkit-menu-c with nibkit beside it). Without _nibkit GBA DS builds without the menu and
+# opens its own with Back instead. On nibOS's build machine:
 #
-#   cd rootfs/gba-ds && PKGDEST="$PWD/out" BUILDDIR="$HOME/makepkg-build" makepkg -f --nodeps
+#   cd rootfs/gba-ds && _nibkit=/path/to/nibkit-menu-c PKGDEST="$PWD/out" \
+#       BUILDDIR="$HOME/makepkg-build" makepkg -f --nodeps
 
 NIBOS_ROOT=$(cd "$startdir/../.." && pwd)
 
 pkgname=gba-ds
-pkgver=1.5
+_commit=fe366b93f8026fa52eeca8f9ee54d0c236250db8
+pkgver=1.5.r1.gfe366b9
 pkgrel=1
 pkgdesc="GBA DS: Game Boy Advance games with their map or status screen on the second screen"
-url="https://github.com/kyannon/gba-ds"
+url="https://github.com/abradburne/gba-ds"
 arch=(aarch64)
 # GBA DS GPL-3.0-only; libmgba (linked in) MPL-2.0; rcheevos (linked in) MIT; its font, Jost,
-# OFL-1.1; nibOS's run-game and the DSlot description GPL-3.0-or-later.
+# OFL-1.1; nibkit's menu (linked in, with _nibkit) MIT, its face Roboto Condensed OFL-1.1;
+# nibOS's run-game and the DSlot description GPL-3.0-or-later.
 license=("GPL-3.0-only AND MPL-2.0 AND MIT AND OFL-1.1 AND GPL-3.0-or-later")
 depends=(bash sdl2-compat)
-# GBA DS's binary as published, byte for byte (it comes stripped).
-options=(!strip)
-optdepends=('dslot: the GBA DS page that starts its games')
+makedepends=(cmake make gcc cargo)   # cargo: nibkit's menu (_nibkit)
+optdepends=('dslot: the GBA DS page that starts its games'
+            'curl: RetroAchievements')
 
 _mgba=143adf5aa2a60c6036810b0cd72445e13d74b0e6
-source=("gba-ds-v$pkgver-linux-aarch64.zip::$url/releases/download/v$pkgver/gba-ds-v$pkgver-linux-aarch64.zip"
-        "gba-ds-$pkgver-source.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+source=("gba-ds-$_commit.tar.gz::$url/archive/$_commit.tar.gz"
         "mgba-$_mgba.tar.gz::https://github.com/mgba-emu/mgba/archive/$_mgba.tar.gz")
-noextract=("gba-ds-$pkgver-source.tar.gz" "mgba-$_mgba.tar.gz")
-sha256sums=('8471976072381eb6bebbc7c588c407fcea10d6b07ff6888df3a2de3694b97731'
-            'c934378f99969b5d434e38e33b482b55358d2d5ecaf853b51573b10bfab1f3bd'
+sha256sums=('3cbaaf73b3353ad00bb5c2c220b6916d03c0cd14d82abd81df46cc9ec8815a90'
             '32d73531d0fe743cfb27c0e11fb4869d495f6fd6a0162353fb73e29c26af64a7')
+
+build() {
+    local gbads="$srcdir/gba-ds-$_commit" mgba="$srcdir/mgba-$_mgba"
+    # GBA DS's libmgba options (MGBA_OPTS), as its release builds have them; mGBA's cmake files
+    # predate CMake 4's minimum.
+    . "$gbads/scripts/mgba-options.sh"
+    cmake -S "$mgba" -B "$mgba/build" "${MGBA_OPTS[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_C_FLAGS="-mcpu=cortex-a55"
+    make -C "$mgba/build" -j"$(nproc)" mgba zlibstatic
+
+    make -C "$gbads" -j"$(nproc)" MGBA_SRC="$mgba" MGBA_BUILD="$mgba/build" SDL_PREFIX=/usr \
+        OPTFLAGS="-O2 -mcpu=cortex-a55" OUT=build/nibos ${_nibkit:+NIBKIT="$_nibkit"}
+}
 
 check() {
     bash -n "$startdir/files/usr/lib/gba-ds/run-game"
-    "$srcdir/gba-ds/gba-ds" --version | grep -qx "GBA DS $pkgver"
+    "$srcdir/gba-ds-$_commit/build/nibos/gba-ds" --version | grep -qx "GBA DS 1.5"
 }
 
 package() {
-    local app="$srcdir/gba-ds"
-    install -Dm755 "$app/gba-ds" "$pkgdir/usr/lib/gba-ds/gba-ds"
-    install -Dm644 "$app/gba-ds.cfg" "$pkgdir/usr/lib/gba-ds/gba-ds.cfg"
-    install -Dm644 "$app/gamecontrollerdb.txt" "$pkgdir/usr/lib/gba-ds/gamecontrollerdb.txt"
-    install -Dm644 "$app/README.md" "$pkgdir/usr/lib/gba-ds/README.md"
-    cp -r "$app/images" "$pkgdir/usr/lib/gba-ds/"
-    install -Dm755 "$startdir/files/usr/lib/gba-ds/run-game" "$pkgdir/usr/lib/gba-ds/run-game"
+    local src="$srcdir/gba-ds-$_commit" lib="$pkgdir/usr/lib/gba-ds"
+    install -Dm755 "$src/build/nibos/gba-ds" "$lib/gba-ds"
+    install -Dm644 "$src/dist/gba-ds.cfg" "$lib/gba-ds.cfg"
+    install -Dm644 "$src/dist/gamecontrollerdb.txt" "$lib/gamecontrollerdb.txt"
+    install -Dm644 "$src/README.md" "$lib/README.md"
+    install -Dm644 "$src/assets/brand/gba-ds-icon-transparent.png" "$lib/images/icon.png"
+    install -Dm755 "$startdir/files/usr/lib/gba-ds/run-game" "$lib/run-game"
     install -Dm644 "$startdir/files/usr/share/dslot/emulators/gba-ds.toml" \
         "$pkgdir/usr/share/dslot/emulators/gba-ds.toml"
 
     local lic="$pkgdir/usr/share/licenses/$pkgname"
-    install -Dm644 "$app/licenses/GBA-DS-LICENSE.txt" "$lic/LICENSE"
-    install -Dm644 "$app/licenses/mGBA-LICENSE.txt" "$lic/LICENSE.mgba"
-    install -Dm644 "$app/licenses/rcheevos-LICENSE.txt" "$lic/LICENSE.rcheevos"
-    install -Dm644 "$app/licenses/Jost-OFL.txt" "$lic/OFL.jost"
-    install -Dm644 "$app/licenses/README.txt" "$lic/README.txt"
+    install -Dm644 "$src/LICENSE" "$lic/LICENSE"
+    install -Dm644 "$srcdir/mgba-$_mgba/LICENSE" "$lic/LICENSE.mgba"
+    install -Dm644 "$src/third_party/rcheevos/LICENSE" "$lic/LICENSE.rcheevos"
+    install -Dm644 "$src/assets/fonts/Jost-OFL.txt" "$lic/OFL.jost"
+    if [ -n "${_nibkit:-}" ]; then
+        install -Dm644 "$_nibkit/../nibkit/LICENSE" "$lic/LICENSE.nibkit"
+        install -Dm644 "$_nibkit/OFL.txt" "$lic/OFL.roboto"
+    fi
     install -Dm644 "$NIBOS_ROOT/LICENSE" "$lic/LICENSE.nibos"
+    printf '%s\n' \
+        "GBA DS (https://github.com/kyannon/gba-ds), as nibOS builds it from its fork" \
+        "(https://github.com/abradburne/gba-ds, commit $_commit): GPL-3.0-only (LICENSE)." \
+        "It statically links libmgba (c) Jeffrey Pfau, MPL-2.0 (LICENSE.mgba), from" \
+        "https://github.com/mgba-emu/mgba at commit $_mgba," \
+        "and rcheevos (c) RetroAchievements, MIT (LICENSE.rcheevos). Its text is set in Jost," \
+        "SIL Open Font License 1.1 (OFL.jost). nibOS's pause menu is nibkit's (MIT, LICENSE.nibkit)," \
+        "drawn in Roboto Condensed (SIL OFL 1.1, OFL.roboto). nibOS's run-game and DSlot's" \
+        "description of GBA DS: GPL-3.0-or-later (LICENSE.nibos)." > "$lic/README.txt"
 }

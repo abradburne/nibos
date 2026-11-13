@@ -5,9 +5,9 @@
 - **GBA DS.** Game Boy Advance games with their map, race HUD or status screen on the second
   screen, on DSlot's new GBA DS page: the games in `Roms/GBA` that
   [GBA DS](https://github.com/kyannon/gba-ds) 1.5 supports (51, with their regional releases).
-  Back pauses and opens nibOS's own menu, and Menu saves the resume point and quits (with a GBA
-  DS built from the `nibos` branch of abradburne/gba-ds; the 1.5 release ignores those options
-  and opens its own menu with Menu). Saves and resume points are kept apart
+  Back pauses and opens nibOS's own menu, and Menu saves the resume point and quits. The package
+  builds GBA DS 1.5 from nibOS's fork (the `nibos` branch of abradburne/gba-ds), which adds
+  that menu and those buttons. Saves and resume points are kept apart
   from the GBA page's, in `Saves/GBADS/` (`rootfs/gba-ds`).
 - **A low-battery warning and a safe power-off.** At 10% and again at 5% a notice comes up on
   the shelf and the red LED blinks, faster when low; apps can read the level from
