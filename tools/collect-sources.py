@@ -54,6 +54,7 @@ OWN_PACKAGES = {
     "nibos-hw": "nibos",
     "nibos-no-fdk-aac": "nibos",
     "portmaster": "portmaster",
+    "gba-ds": "gba-ds",
     "mesa-nibos": "mesa-nibos",
     "dslot": "dslot",
     "dsperate": "dsperate",
@@ -476,6 +477,11 @@ def main():
             path = collect_tree(os.path.join(NIBOS, "rootfs/portmaster"), files, srcdest,
                                 f"portmaster-{own[name]['version']}", {"NIBOS_ROOT": NIBOS})
             archive_of[name] = (path, "nibOS rootfs/portmaster")
+        elif key == "gba-ds":
+            # The release zip, and GBA DS's and mGBA's source at what it was built from.
+            path = collect_tree(os.path.join(NIBOS, "rootfs/gba-ds"), files, srcdest,
+                                f"gba-ds-{own[name]['version']}", {"NIBOS_ROOT": NIBOS})
+            archive_of[name] = (path, "nibOS rootfs/gba-ds (with GBA DS's and mGBA's source)")
         else:
             archive_of[name] = sources[key]
 

@@ -1,0 +1,85 @@
+# GBA DS (https://github.com/kyannon/gba-ds), for DSlot's GBA DS page (rootfs/gba-ds in nibOS):
+# Game Boy Advance games with their map or status screen on the second screen. The page lists
+# the games in Roms/GBA that GBA DS has a second screen for; run-game starts one as nibOS
+# needs. Battery save and resume point are in the game's saves folder (Saves/GBADS/<game>/),
+# apart from the GBA page's.
+name = "GBA DS"
+priority = 100
+requires = ["/usr/lib/gba-ds/gba-ds"]
+
+[systems]
+GBADS = ["/usr/lib/gba-ds/run-game", "{options}", "{rom}", "{saves}"]
+
+# Options DSlot shows (for every GBA DS game and for each game) and passes when set, and
+# that GBA DS's pause menu (nibOS's shared one, --menu=nibkit) shows and changes as the game
+# plays. Each key is GBA DS's own setting's name (gba-ds.cfg). `default` is what GBA DS does
+# when not told (its gba-ds.cfg as packaged): shown, never passed.
+[[options]]
+key = "swap"
+label = "Game on the bottom screen"
+kind = "toggle"
+default = false
+args = ["--swap"]
+off = ["--no-swap"]
+
+[[options]]
+key = "scale"
+label = "Picture size"
+values = ["integer", "fit", "zoom", "stretch"]
+labels = ["Pixel perfect (4x)", "Full width", "Full height (sides cut)", "Stretched"]
+default = "integer"
+args = ["--scale={value}", "--map-scale={value}"]
+
+# A pattern over every pixel (GBA DS's Display > Shader). The subpixel looks brighten the
+# colours to make up for their stripes.
+[[options]]
+key = "shader"
+label = "Screen look"
+values = ["off", "grid", "scanlines", "soft", "subpixels-light", "subpixels", "subpixels-strong"]
+labels = ["Off", "LCD grid", "Scanlines", "Soft cells", "Subpixels (light)", "Subpixels", "Subpixels (strong)"]
+default = "off"
+args = ["--shader={value}"]
+
+[[options]]
+key = "color_correction"
+label = "GBA screen colours"
+kind = "toggle"
+default = false
+args = ["--color-correction"]
+off = ["--no-color-correction"]
+
+[[options]]
+key = "lcd_ghosting"
+label = "LCD ghosting"
+kind = "toggle"
+default = false
+args = ["--lcd-ghosting"]
+off = ["--no-lcd-ghosting"]
+
+[[options]]
+key = "rewind"
+label = "Rewind (hold L2)"
+kind = "toggle"
+default = true
+args = ["--rewind"]
+off = ["--no-rewind"]
+
+[[options]]
+key = "fast_forward"
+label = "Fast-forward (hold R2)"
+kind = "toggle"
+default = true
+args = ["--fast-forward"]
+off = ["--no-fast-forward"]
+
+[[options]]
+key = "ab_swap"
+label = "A on the bottom button"
+kind = "toggle"
+default = false
+args = ["--ab-swap"]
+off = ["--no-ab-swap"]
+
+[[actions]]
+label = "Clear resume state"
+delete = ["{saves}/*.auto.state"]

@@ -1,0 +1,74 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# run-game: starts one Game Boy Advance game in GBA DS (https://github.com/kyannon/gba-ds) on
+# nibOS, the way DSlot starts a game (gba-ds.toml in /usr/share/dslot/emulators).
+#
+#   run-game [GBA DS options] <game.gba or .zip> <the game's saves folder>
+#
+# GBA DS's own launcher (launch.sh) is for ROCKNIX, BananaOS and the stock OS, and keeps its
+# log and data beside the program; this does what nibOS needs instead:
+#   - both panels: SDL's KMSDRM driver, a window on each. SDL3's atomic path (SDL2 programs
+#     run on it through sdl2-compat) sets up a plane for the first window's display only, and
+#     GBA DS crashed making the second window (1.5, 12 Nov 2026): off, as DSlot and DSperate
+#     have it;
+#   - the touchscreen read from its device: the bottom panel's own, a window per screen;
+#   - battery save, resume point and save states in the game's saves folder, which DSlot makes;
+#   - GBA DS's other files (settings from its menus, cheats, overlays, screenshots) in
+#     ~/.local/share/gba-ds: /usr/lib/gba-ds is read-only to the user;
+#   - no looking for updates: the package is how GBA DS is updated here;
+#   - Menu as GBA DS's HOME button (its menu, and Menu + Start to quit), and no bezels.
+# GBA DS replaces this script (exec), so DSlot's SIGTERM reaches it: it saves the resume
+# point and quits.
+set -u
+
+app=/usr/lib/gba-ds
+[ $# -ge 2 ] || { echo "usage: run-game [options] <game> <saves folder>" >&2; exit 2; }
+saves="${*: -1}"
+rom="${*: -2:1}"
+options=("${@:1:$#-2}")
+
+data="${XDG_DATA_HOME:-$HOME/.local/share}/gba-ds"
+mkdir -p "$data/screenshots" "$saves" || exit 1
+
+export SDL_KMSDRM_ATOMIC="${SDL_KMSDRM_ATOMIC:-0}"
+
+## The touchscreen's event device, by its name.
+touch=""
+for name in /sys/class/input/event*/device/name; do
+  case "$(cat "$name" 2>/dev/null)" in
+    *[Tt]ouch[Ss]creen*)
+      touch="${name%/device/name}"
+      touch="/dev/input/${touch##*/}"
+      break
+      ;;
+  esac
+done
+
+args=(
+  "--data-dir=$data"
+  "--save-dir=$saves"
+  "--state-dir=$saves"
+  "--screenshot-dir=$data/screenshots"
+  --layout=dual
+  # SDL lists the bottom panel (DSI-1, the touchscreen) first here: the game on the top one.
+  --top-screen=second
+  --touch-map=screen
+  --update-check=0
+  # Menu: nibos-input's gamepad sends it as BTN_MODE, raw button 10 (SDL's "guide"), which
+  # GBA DS 1.5 doesn't take as HOME unless told (its log: "use home_button = 10"). As in
+  # nibOS's other emulators, Menu saves the resume point and leaves the game (Menu held with
+  # another button is still a hotkey), and Back pauses with the menu.
+  --home-button=10
+  --home-button-action=quit
+  --back-button=menu
+  # No quick bar (swipe up from the bottom edge): Back and the pause menu, as elsewhere.
+  --quick-bar=0
+  # No bezel round the picture: the panels' own black border is enough.
+  --overlays=off
+  # The pause menu nibOS's apps share (DSlot's rows, tabs and settings: built in by the
+  # package, from the fork's src/nibmenu.c); GBA DS's own is a row away on its Game tab.
+  --menu=nibkit
+)
+[ -n "$touch" ] && args+=("--touch-device=$touch")
+
+exec "$app/gba-ds" "${args[@]}" "${options[@]}" "$rom"
