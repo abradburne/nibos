@@ -79,11 +79,12 @@ away either way.
   `/run/nibos/sleep-off-alarm` (an alarm already set for sooner, e.g. a test's `rtcwake`, is
   left alone and nothing is recorded). After waking, if its recorded alarm has been reached and
   cleared by the kernel (so the alarm woke the device, not a lid or key) and the charger is
-  still out, it logs `nibos-sleep-off: asleep the set time on battery: powering off` and starts
-  a transient service that takes a block inhibitor on sleep and the lid switch at once
-  (`systemd-inhibit --what=sleep:handle-lid-switch`) and then asks for `systemctl poweroff`
-  every 0.5 s until logind takes it (it refuses while the suspend that woke is still finishing:
-  "Action suspend already in progress"). Woken early, it clears the alarm so it can't fire later. On the charger it does nothing
+  still out, it logs `nibos-sleep-off: asleep the set time on battery: powering off` and queues
+  `poweroff.target` in systemd itself, not through logind:
+  `systemctl start --no-block --job-mode=replace-irreversibly poweroff.target`. logind's next
+  suspend (the lid still closed) can't replace that job and fails
+  (`suspend.target: Job suspend.target/start failed with result 'dependency'`). Woken early,
+  it clears the alarm so it can't fire later. On the charger it does nothing
   (the device charges asleep, and `nibos-charge-boot`'s own loop sleeps it again after any wake).
   `/run/nibos/sleep-off-dry-run` makes it log instead of powering off.
 - **Risk to waking:** none added. The alarm is set only on top of a sleep that already works,
@@ -100,10 +101,20 @@ away either way.
   wait out the suspend that is finishing. Taking the inhibitor can itself be refused while that
   suspend runs (`Failed to inhibit: The operation inhibition has been requested for is already
   running`): on 2026-11-09 the device woke each hour, the service failed at once, and it slept
-  again. The service now retries the inhibitor as well, every 0.5 s for 30 s.
+  again. The service then retried the inhibitor as well, and lost the same way: on 2026-11-13
+  logind suspended again before its retries ran out, the service was frozen mid-loop and stayed
+  loaded, and every later hour's `systemd-run` failed with `Unit nibos-sleep-off.service was
+  already loaded`; the device slept all day and powered off only when the power key woke it
+  (and the stale service's power-off went through), so it looked as if the key had not started
+  it. Anything that asks logind loses this race, so the hook now queues the power-off job in
+  systemd directly, irreversibly (above).
 
 ## Tested
 
+- The irreversible power-off job, 2026-11-13, lid closed, on battery, `nib sleep off-after 1`,
+  kernel #9: `suspend entry` 21:19:03 JST, the alarm woke it 21:20:05, the hook queued the
+  power-off, logind's re-suspend failed with `result 'dependency'`, `Finished System Power Off`
+  21:20:09. A tap of the power key started it again.
 - With the lid closed, on battery, `nib sleep off-after 1`, 2026-10-29: the alarm woke the
   device a minute later, the hook's service took the inhibitor, logind accepted the power-off
   at the first asking, in the same second as the wake, and the device shut down cleanly

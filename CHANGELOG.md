@@ -15,6 +15,11 @@
   row, the device powers itself off, and a running game saves and quits on the way, as from the
   power menu. Plugging in the charger clears it. The limits are the board's
   (`NIBOS_BATTERY_*`).
+- **Asleep too long, the device really powers off.** With the lid closed it went back to sleep
+  about two seconds after each hourly wake, before the power-off logind had to accept could get
+  through; the leftover power-off then blocked every later hour's, so the device slept on until
+  the power key woke it and it shut down instead of starting. The power-off is now queued in
+  systemd directly, where the lid's re-suspend can't replace it.
 - **The power key starts the device after a power-off, also after a sleep.** beta3's fix only
   held until the first sleep: waking didn't take the PMIC's sleep line back off, so the
   asleep-too-long power-off still needed a long press. The board's device tree now sets the line
