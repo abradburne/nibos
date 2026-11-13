@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-beta4
+
+GBA DS, screen looks for the DS, GBA and Game Boy, a low-battery warning, and powering off
+after a long sleep that really happens.
 
 - **GBA DS.** Game Boy Advance games with their map, race HUD or status screen on the second
   screen, on DSlot's new GBA DS page: the games in `Roms/GBA` that
@@ -9,6 +12,13 @@
   builds GBA DS 1.5 from nibOS's fork (the `nibos` branch of abradburne/gba-ds), which adds
   that menu and those buttons. Saves and resume points are kept apart
   from the GBA page's, in `Saves/GBADS/` (`rootfs/gba-ds`).
+- **Screen looks for DS and GBA games** (DSperate): an LCD look over each pixel (grid,
+  scanlines, soft, or light, normal or strong subpixels) and the GBA's own colours, ported from
+  GBA DS. Off unless chosen in the emulator's settings.
+- **Screen textures for the Game Boy** (inkdot): the *Screen texture* option replaces the LCD
+  texture switch: like its screen (the default), pixel grid, colour stripes, bold colour
+  stripes, scanlines, soft pixels or none. On the Game Boy, Pocket and Light the gaps between
+  pixels show the screen's backing and dark pixels cast a shadow.
 - **A low-battery warning and a safe power-off.** At 10% and again at 5% a notice comes up on
   the shelf and the red LED blinks, faster when low; apps can read the level from
   `/run/nibos/battery-alert`. At 2%, or with the cell at or under 3.45 V for three readings in a
