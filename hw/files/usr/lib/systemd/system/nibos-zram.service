@@ -7,7 +7,7 @@
 Description=Compressed swap in RAM (zram)
 # Once booted, not as part of it: as a swap.target member it holds up /tmp, and with it
 # local-fs.target and everything after, until udev has seen /dev/zram0.
-After=multi-user.target
+After=multi-user.target dslot.service
 ConditionPathExists=/sys/class/zram-control
 
 [Service]

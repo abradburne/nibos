@@ -2,7 +2,7 @@
 # at full speed; once booted, this hands the CPU clock to schedutil.
 [Unit]
 Description=Hand the CPU clock to schedutil once booted
-After=multi-user.target
+After=multi-user.target dslot.service
 
 [Service]
 Type=oneshot

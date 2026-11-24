@@ -76,6 +76,14 @@ fn write(path: impl AsRef<Path>, text: &str) -> std::io::Result<()> {
     fs::rename(tmp, path)
 }
 
+/// Atomic write for /run (tmpfs): no fsync needed.
+fn write_run(path: impl AsRef<Path>, text: &str) -> std::io::Result<()> {
+    let path = path.as_ref();
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, text)?;
+    fs::rename(tmp, path)
+}
+
 fn release() -> Release {
     Release::parse(&fs::read_to_string(sys(RELEASE)).unwrap_or_default())
 }
@@ -122,7 +130,7 @@ fn status(phase: &str, detail: &str, extra: &[(&str, String)]) {
     }
     json.push_str("}\n");
     let _ = fs::create_dir_all(sys(RUN));
-    let _ = write(sys(RUN).join("status.json"), &json);
+    let _ = write_run(sys(RUN).join("status.json"), &json);
 }
 
 /// Whether the slot that isn't running is confirmed good (nibos-bootctl status).
@@ -595,7 +603,9 @@ fn booted() {
             }
         }
     }
-    let _ = write(state("last-version"), &r.version);
+    if read(state("last-version")).as_deref() != Some(r.version.as_str()) {
+        let _ = write(state("last-version"), &r.version);
+    }
     // "Updated to X" only while X is what runs (not after going back).
     if read(state("updated-to")).is_some_and(|v| v != r.version) {
         let _ = fs::remove_file(state("updated-to"));

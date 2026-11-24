@@ -52,7 +52,7 @@ prepare() {
 
 build() {
     cd "$srcdir/hw/daemons"
-    cargo build --release --frozen
+    RUSTFLAGS="${RUSTFLAGS:-} -C target-cpu=cortex-a55" cargo build --release --frozen
 }
 
 check() {

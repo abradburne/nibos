@@ -13,6 +13,7 @@
 use nibos_hw::provision::{self, DataCard, Provision};
 use std::{
     collections::BTreeMap,
+    ffi::CString,
     fs,
     io::{self, Write},
     os::unix::fs::{symlink, PermissionsExt},
@@ -154,18 +155,73 @@ fn apply(p: &Provision, state: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Writes `path` only if it does not already hold `text` with `mode`; returns whether it changed.
+fn sync_file(path: &Path, text: &str, mode: u32) -> io::Result<bool> {
+    if let Ok(existing) = fs::read_to_string(path) {
+        if existing == text {
+            if let Ok(meta) = fs::metadata(path) {
+                if meta.permissions().mode() & 0o777 == mode {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+    write_file(path, text, mode)?;
+    Ok(true)
+}
+
+/// Removes `path` if it exists; returns whether a file was removed.
+fn remove_if_exists(path: &Path) -> io::Result<bool> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// Mounts the FAT boot partition directly via syscall (no `mount` subprocess on every boot).
+fn mount_boot() -> bool {
+    let Ok(src) = CString::new(BOOT_PART) else {
+        return false;
+    };
+    let Ok(dst) = CString::new(BOOT_MOUNT) else {
+        return false;
+    };
+    let flags = libc::MS_NOEXEC | libc::MS_NOSUID | libc::MS_NODEV;
+    // SAFETY: NUL-terminated C strings passed to mount(2).
+    unsafe {
+        libc::mount(
+            src.as_ptr(),
+            dst.as_ptr(),
+            c"vfat".as_ptr(),
+            flags,
+            c"umask=077".as_ptr().cast(),
+        ) == 0
+    }
+}
+
+fn umount_boot() {
+    if let Ok(dst) = CString::new(BOOT_MOUNT) {
+        // SAFETY: NUL-terminated mount point path.
+        unsafe { libc::umount2(dst.as_ptr(), 0) };
+    }
+}
+
 /// The console, sudo, polkit and SSH as the state says.
+/// Only writes files or calls systemctl/daemon-reload when something actually changed: on every
+/// normal boot after the first, this does zero writes and spawns zero subprocesses.
 fn access(state: &Path) -> io::Result<()> {
     let password = fs::read_to_string(state.join("password")).is_ok_and(|s| s.trim() == "set");
     let autologin = Path::new("/etc/systemd/system/getty@tty1.service.d/autologin.conf");
     let sudoers = Path::new("/etc/sudoers.d/wheel");
     let polkit = Path::new("/etc/polkit-1/rules.d/49-nibos-wheel.rules");
-    if password {
-        let _ = fs::remove_file(autologin);
-        write_file(sudoers, "%wheel ALL=(ALL:ALL) ALL\n", 0o440)?;
-        let _ = fs::remove_file(polkit);
+    let autologin_changed = if password {
+        let changed = remove_if_exists(autologin)?;
+        sync_file(sudoers, "%wheel ALL=(ALL:ALL) ALL\n", 0o440)?;
+        let _ = remove_if_exists(polkit);
+        changed
     } else {
-        write_file(
+        let changed = sync_file(
             autologin,
             &format!(
                 "# nibos-provision: no password is set, so tty1 logs {USER} in.\n[Service]\n\
@@ -173,45 +229,60 @@ fn access(state: &Path) -> io::Result<()> {
             ),
             0o644,
         )?;
-        write_file(sudoers, "%wheel ALL=(ALL:ALL) NOPASSWD: ALL\n", 0o440)?;
-        write_file(
+        sync_file(sudoers, "%wheel ALL=(ALL:ALL) NOPASSWD: ALL\n", 0o440)?;
+        sync_file(
             polkit,
             "// nibos-provision: no password is set, so wheel needs none for polkit.\n\
              polkit.addRule(function(action, subject) {\n    \
              if (subject.isInGroup(\"wheel\")) return polkit.Result.YES;\n});\n",
             0o644,
         )?;
-    }
+        changed
+    };
     // sshd reads authorized_keys as the user logging in, so the way to it must be open to
     // everyone (images up to db9a3c7 made the state partition's top 0700, and every key was
     // refused).
     for dir in [state.to_path_buf(), state.join("ssh")] {
-        if dir.is_dir() {
-            fs::set_permissions(&dir, fs::Permissions::from_mode(0o755))?;
+        if let Ok(meta) = fs::metadata(&dir) {
+            if meta.is_dir() && meta.permissions().mode() & 0o777 != 0o755 {
+                fs::set_permissions(&dir, fs::Permissions::from_mode(0o755))?;
+            }
         }
     }
     let keys = fs::read_to_string(state.join("ssh").join("authorized_keys"))
         .is_ok_and(|s| !s.trim().is_empty());
-    let verb = if keys { "enable" } else { "disable" };
-    run("systemctl", &[verb, "--quiet", "sshd.socket"], None)?;
-    run("systemctl", &["daemon-reload"], None)?;
-    // Enabling only changes later boots: this boot's jobs were decided before this ran, so the
-    // socket is started (or stopped) now too, or SSH would wait for a restart after the first
-    // boot. --no-block: this unit is ordered before sshd.socket, so waiting would deadlock.
-    let now = if keys { "start" } else { "stop" };
-    run("systemctl", &[now, "--no-block", "sshd.socket"], None)
+    let sshd_enabled = Path::new("/etc/systemd/system/sockets.target.wants/sshd.socket").exists();
+    let sshd_changed = keys != sshd_enabled;
+    if sshd_changed {
+        let verb = if keys { "enable" } else { "disable" };
+        run("systemctl", &[verb, "--quiet", "sshd.socket"], None)?;
+    }
+    if autologin_changed || sshd_changed {
+        run("systemctl", &["daemon-reload"], None)?;
+    }
+    if sshd_changed {
+        // Enabling only changes later boots: this boot's jobs were decided before this ran, so the
+        // socket is started (or stopped) now too, or SSH would wait for a restart after the first
+        // boot. --no-block: this unit is ordered before sshd.socket, so waiting would deadlock.
+        let now = if keys { "start" } else { "stop" };
+        run("systemctl", &[now, "--no-block", "sshd.socket"], None)?;
+    }
+    Ok(())
 }
 
-fn provision_file(boot: &Path, state: &Path) -> io::Result<()> {
+/// Applies `provision.toml` if present; returns whether anything on `boot` was written or removed.
+fn provision_file(boot: &Path, state: &Path) -> io::Result<bool> {
     let file = boot.join("provision.toml");
     // A Mac leaves "._provision.toml" (AppleDouble: the file's extended attributes) beside it
     // on a FAT volume. nibOS never reads it; wiped with the file it belongs to.
     let apple = boot.join("._provision.toml");
+    let mut dirty = false;
     if apple.exists() && !file.exists() {
         let _ = wipe(&apple);
+        dirty = true;
     }
     if !file.exists() {
-        return Ok(());
+        return Ok(dirty);
     }
     let text = String::from_utf8_lossy(&fs::read(&file)?).into_owned();
     match provision::parse(&text) {
@@ -242,31 +313,21 @@ fn provision_file(boot: &Path, state: &Path) -> io::Result<()> {
             eprintln!("nibos-provision: provision.toml refused: {why}");
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 fn main() {
     let boot = PathBuf::from(BOOT_MOUNT);
     let state = PathBuf::from(STATE);
     let _ = fs::create_dir_all(&boot);
-    let mounted = run(
-        "mount",
-        &[
-            "-t",
-            "vfat",
-            "-o",
-            "rw,noexec,nosuid,nodev,umask=077",
-            BOOT_PART,
-            BOOT_MOUNT,
-        ],
-        None,
-    )
-    .is_ok();
+    let mounted = mount_boot();
     let result = if mounted {
         let r = provision_file(&boot, &state);
-        let _ = Command::new("sync").status();
-        let _ = run("umount", &[BOOT_MOUNT], None);
-        r
+        if matches!(r, Ok(true)) {
+            let _ = Command::new("sync").status();
+        }
+        umount_boot();
+        r.map(|_| ())
     } else {
         eprintln!("nibos-provision: no {BOOT_PART}; nothing to read");
         Ok(())

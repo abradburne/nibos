@@ -1,8 +1,13 @@
 # nibos-hw: the board's buttons and stick as one standard gamepad
 # (/usr/bin/nibos-input, hw/daemons; the devices are named in
-# /usr/lib/nibos/board.conf). Enabled by the package.
+# /usr/lib/nibos/board.conf). Enabled by the package; starts early so the
+# gamepad is ready as soon as the boot UI draws its first frame.
 [Unit]
 Description=Buttons and stick as one gamepad
+DefaultDependencies=no
+After=systemd-remount-fs.service
+Before=shutdown.target
+Conflicts=shutdown.target
 
 [Service]
 ExecStart=/usr/bin/nibos-input
@@ -10,4 +15,4 @@ Restart=on-failure
 RestartSec=2
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=sysinit.target

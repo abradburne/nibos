@@ -4,6 +4,7 @@
 # Enabled by the package.
 [Unit]
 Description=Low battery warning and safe power-off
+After=dslot.service
 
 [Service]
 ExecStart=/usr/bin/nibos-battery

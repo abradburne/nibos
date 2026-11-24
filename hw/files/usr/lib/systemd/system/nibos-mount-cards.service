@@ -1,0 +1,18 @@
+# nibos-hw: mount /mnt/roms and /mnt/ds straight from devtmpfs via sysfs uevent metadata,
+# in parallel with DSlot's GL init, without waiting ~1.5 s for udev coldplug / blkid.
+[Unit]
+Description=Mount ROMS and games cards early
+DefaultDependencies=no
+After=systemd-remount-fs.service nibos-firstboot-data.service
+Before=shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+IOSchedulingClass=best-effort
+IOSchedulingPriority=4
+ExecStart=/usr/bin/nibos-mount-cards
+
+[Install]
+WantedBy=sysinit.target

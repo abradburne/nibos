@@ -47,11 +47,11 @@ fn fail(what: &str, e: impl std::fmt::Display) -> ! {
 /// The input device with this name, waiting up to 30 s for it to appear (the
 /// devices can come up a moment after the service starts).
 fn open(name: &str) -> Device {
-    for _ in 0..60 {
+    for _ in 0..600 {
         if let Some((_, dev)) = evdev::enumerate().find(|(_, d)| d.name() == Some(name)) {
             return dev;
         }
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(50));
     }
     fail("no input device named", name);
 }

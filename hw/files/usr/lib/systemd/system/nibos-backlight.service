@@ -4,7 +4,7 @@
 [Unit]
 Description=Keep the screens' brightness across restarts
 DefaultDependencies=no
-After=systemd-remount-fs.service
+After=systemd-remount-fs.service dslot.service
 Before=shutdown.target
 Conflicts=shutdown.target
 

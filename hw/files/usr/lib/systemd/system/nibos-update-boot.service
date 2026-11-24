@@ -5,8 +5,8 @@
 Description=System update: state migrations and the update's outcome
 DefaultDependencies=no
 RequiresMountsFor=/var/lib/nibos/state
-After=local-fs.target
-Before=dslot.service getty@tty1.service multi-user.target shutdown.target
+After=dslot.service
+Before=getty@tty1.service multi-user.target shutdown.target
 Conflicts=shutdown.target
 
 [Service]

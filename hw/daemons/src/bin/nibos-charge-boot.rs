@@ -233,6 +233,18 @@ fn sleep_once() -> bool {
 }
 
 fn main() {
+    let check = std::env::args().nth(1).as_deref() == Some("--check");
+    if check {
+        // nibos-splash already checked the PMIC power-on source and wrote /run/nibos/splash
+        // only on non-charger boots (or MARK on charger boots): skip board.conf and I2C.
+        if Path::new("/run/nibos/splash").exists() || Path::new(OVER).exists() {
+            exit(0);
+        }
+        if Path::new(MARK).exists() {
+            backlights(false);
+            exit(1);
+        }
+    }
     let board = match Board::load() {
         Ok(b) => b,
         Err(e) => {
@@ -244,8 +256,8 @@ fn main() {
         exit(0);
     };
 
-    if std::env::args().nth(1).as_deref() == Some("--check") {
-        if !Path::new(OVER).exists() && charger_boot(&board, source) {
+    if check {
+        if !Path::new(OVER).exists() && (Path::new(MARK).exists() || charger_boot(&board, source)) {
             // Dark at once: skipping the boot UI starts the console's login prompt on tty1
             // (its OnSuccess=), and the service that sleeps starts only once logind runs.
             backlights(false);
