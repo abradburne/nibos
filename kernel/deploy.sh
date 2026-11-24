@@ -33,7 +33,9 @@ target=${1:-$DEVICE}
 # watchdog (a good slot) it changes nothing.
 # firmware_class.path: firmware nibOS chooses at run time (the speaker amps' tuning: nib audio)
 # comes from /var/lib/nibos/firmware before /usr/lib/firmware.
-bootargs="root=PARTLABEL=$BOARD_ROOT_PARTLABEL rootfstype=ext4 rootwait rw firmware_class.path=/var/lib/nibos/firmware console=tty1 fbcon=font:TER16x32 systemd.tty.rows.console=$BOARD_CONSOLE_ROWS systemd.tty.columns.console=$BOARD_CONSOLE_COLUMNS SYSTEMD_DEFAULT_MOUNT_RATE_LIMIT_BURST=20 watchdog.open_timeout=60 quiet loglevel=3"
+# rcupdate.rcu_expedited=1: nibos-rcu.conf sets this at runtime, too late for DSlot's initial
+# controller scan (SDL closes ~17 evdev nodes, each waiting for an RCU grace period: ~0.5 s).
+bootargs="root=PARTLABEL=$BOARD_ROOT_PARTLABEL rootfstype=ext4 rootwait rw firmware_class.path=/var/lib/nibos/firmware console=tty1 fbcon=font:TER16x32 systemd.tty.rows.console=$BOARD_CONSOLE_ROWS systemd.tty.columns.console=$BOARD_CONSOLE_COLUMNS SYSTEMD_DEFAULT_MOUNT_RATE_LIMIT_BURST=20 watchdog.open_timeout=60 rcupdate.rcu_expedited=1 quiet loglevel=3"
 # The power-on splash (init= puts DSlot's logo up, then runs systemd) stays on or off as the device
 # has it (../rootfs/splash/boot.sh on|off): in the Falcon FIT only, so the fallback through
 # extlinux keeps the plain command line. extlinux.conf records it in a "# splash on" line.
