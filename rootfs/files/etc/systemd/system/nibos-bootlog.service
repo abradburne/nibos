@@ -2,8 +2,10 @@
 # in; nibos-bootlog-shutdown.service writes them again, complete, at power-off and restart.
 [Unit]
 Description=Save this start's logs to the ROMS volume
-RequiresMountsFor=/mnt/roms
-After=multi-user.target
+# No RequiresMountsFor=/mnt/roms: that pulls mnt-roms.mount into the boot transaction ahead of
+# dslot.service (via nibos-cards.conf's After=mnt-roms.mount). /mnt/roms is an automount and
+# mounts on demand when bootlog runs after DSlot is up.
+After=multi-user.target dslot.service
 
 [Service]
 # Simple, not oneshot: its 20 s wait would hold the start-up open (is-system-running

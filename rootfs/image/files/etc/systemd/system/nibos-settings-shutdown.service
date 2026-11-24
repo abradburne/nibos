@@ -2,8 +2,9 @@
 # (settings-mirror), after DSlot has written its own.
 [Unit]
 Description=Copy the settings to NIBOS-DATA at power-off
-RequiresMountsFor=/mnt/roms
-After=dslot.service nibos-safe-mode.service getty@tty1.service
+# Ordering only (After=, not RequiresMountsFor=): don't pull mnt-roms.mount into the boot
+# transaction ahead of dslot.service, while still stopping before /mnt/roms unmounts at power-off.
+After=mnt-roms.mount dslot.service nibos-safe-mode.service getty@tty1.service
 
 [Service]
 Type=oneshot

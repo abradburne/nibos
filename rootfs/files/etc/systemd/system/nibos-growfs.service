@@ -5,6 +5,7 @@
 # systemd-growfs does nothing to a file system that already fills its partition.
 [Unit]
 Description=Grow the root file system to fill its partition
+After=dslot.service
 
 [Service]
 Type=oneshot

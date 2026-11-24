@@ -3,15 +3,19 @@
 [Unit]
 Description=Make the data partition (first boot)
 DefaultDependencies=no
-RequiresMountsFor=/var/lib/nibos/state
-ConditionPathExists=/var/lib/nibos/state/data-partition
-After=systemd-udev-settle.service
+# Marker on rootfs so boot #2+ skips immediately without waiting for udev-settle or
+# var-lib-nibos-state.mount (which would delay mnt-roms.automount and local-fs.target).
+# First boot (or first boot after an OTA into a fresh slot) runs firstboot-data, which waits
+# for /var/lib/nibos/state itself and exits immediately when state/data-partition is already "done".
+ConditionPathExists=!/var/lib/nibos/data-partition-done
+After=systemd-remount-fs.service
 Before=mnt-roms.automount mnt-roms.mount nibos-bootlog.service shutdown.target
 Conflicts=shutdown.target
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/nibos/firstboot-data
+ExecStartPost=/bin/sh -c 'mkdir -p /var/lib/nibos && touch /var/lib/nibos/data-partition-done'
 RemainAfterExit=yes
 
 [Install]

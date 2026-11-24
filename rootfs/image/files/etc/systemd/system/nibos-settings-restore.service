@@ -6,7 +6,7 @@
 Description=Put the settings back from NIBOS-DATA (a card written again)
 DefaultDependencies=no
 ConditionPathExists=!/var/lib/nibos/settings-restored
-After=systemd-remount-fs.service nibos-firstboot-data.service mnt-roms.automount
+After=systemd-remount-fs.service
 Before=dslot.service nibos-safe-mode.service getty@tty1.service shutdown.target
 Conflicts=shutdown.target
 

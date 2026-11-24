@@ -51,6 +51,16 @@ save)
     rm -rf "$copy.old"
     sync -f "$copy" 2>/dev/null || sync ;;
 restore)
+    # Only runs on the first start of a freshly written image: wait for the first-boot data
+    # partition and /mnt/roms here instead of ordering the unit after them on every later boot.
+    if [ -z "${ROOT:-}" ]; then
+        marker=/var/lib/nibos/state/data-partition
+        i=0
+        while [ "$i" -lt 150 ] && [ -f "$marker" ] && [ "$(cat "$marker" 2>/dev/null)" != "done" ]; do
+            sleep 0.1
+            i=$((i + 1))
+        done
+    fi
     [ -d "$copy" ] || { echo "settings-mirror: no settings on the drive to put back"; exit 0; }
     # Made as the user, so what is made is theirs (a new home's own folders, ~/.config 0700,
     # are left as they are).

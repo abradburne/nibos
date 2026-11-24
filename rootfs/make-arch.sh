@@ -153,10 +153,11 @@ printf 'KEYMAP=us\n' > "$root/etc/vconsole.conf"
 # ROMS mounts on first use, not during boot.
 if [ "$for_image" = 1 ]; then
     # The state partition (what provision.toml sets), and the data partition the first boot
-    # makes (docs/design/images.md).
+    # makes (docs/design/images.md). /mnt/roms uses noauto so nibos-mount-cards.service mounts
+    # it straight from devtmpfs at ~2 s without waiting for udev coldplug.
     cat > "$root/etc/fstab" <<EOF
 PARTLABEL=nibos-state  /var/lib/nibos/state  ext4  rw,noatime  0 0
-LABEL=NIBOS-DATA  /mnt/roms  exfat  rw,noatime,nofail,x-systemd.automount,uid=$uid,gid=$uid,fmask=0022,dmask=0022  0 0
+LABEL=NIBOS-DATA  /mnt/roms  exfat  rw,noatime,nofail,noauto,uid=$uid,gid=$uid,fmask=0022,dmask=0022  0 0
 /dev/nibos-games-card  /mnt/ds  auto  rw,noatime,nofail,noauto,x-systemd.device-bound,uid=$uid,gid=$uid,fmask=0022,dmask=0022  0 0
 EOF
     mkdir -p "$root/var/lib/nibos/state" "$root/mnt/ds"

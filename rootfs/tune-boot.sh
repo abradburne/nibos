@@ -75,6 +75,12 @@ CONF
 # hundreds (tmpfiles alone 122) while PID 1 is busy starting units. Ask systemd
 # only for groups /etc/group doesn't have (dynamic users still resolve).
 sed -i 's/^group: *files \[SUCCESS=merge\] systemd/group: files systemd/' "$root/etc/nsswitch.conf"
+# initgroups() iterates every module on the group: line, which wakes
+# systemd-userdbd.service (+130 ms) when dslot.service sets SupplementaryGroups=.
+# All static users' supplementary groups live in /etc/group.
+if ! grep -q '^initgroups:' "$root/etc/nsswitch.conf"; then
+    sed -i '/^group:/a initgroups: files' "$root/etc/nsswitch.conf"
+fi
 
 # systemd-backlight@ is ordered before sysinit.target, so everything after
 # sysinit (dbus, logind, the console) waited until PID 1 had worked through the
@@ -97,17 +103,56 @@ sed '/^Before=systemd-tmpfiles-setup.service$/d' "$root/usr/lib/systemd/system/s
 # names and time wait for.
 #
 # The same for udevd, ~0.5 s to start while coldplug loads it (devices appear
-# whenever it's up; nothing before the console waits for one), and for the utmp
-# boot record.
-for u in systemd-resolved systemd-timesyncd systemd-udevd systemd-update-utmp; do
+# whenever it's up; nothing before the console waits for one), utmp,
+# modules-load (AW88166 speaker amp + firmware), and random-seed.
+for u in systemd-resolved systemd-timesyncd systemd-udevd systemd-update-utmp \
+         systemd-modules-load systemd-random-seed; do
     sed -E '/^Before=/{s/(=| )sysinit\.target( |$)/\1/;/^Before=$/d;}' "$root/usr/lib/systemd/system/$u.service" \
         > "$root/etc/systemd/system/$u.service"
 done
 
-# Hugepages and the FUSE control file system have no users here; two fewer
-# mounts in the early burst.
-for u in dev-hugepages sys-fs-fuse-connections; do
-    ln -sf /dev/null "$root/etc/systemd/system/$u.mount"
+# When the boot UI (dslot.service, Type=notify) is enabled, hold background I/O
+# and network/audio setup until its first frame and buttons are live (~1 s).
+# Ordering-only (After=): no effect when dslot.service is disabled.
+for u in systemd-journal-flush systemd-modules-load systemd-random-seed \
+         systemd-sysctl systemd-resolved systemd-timesyncd \
+         systemd-tmpfiles-setup systemd-update-utmp; do
+    mkdir -p "$root/etc/systemd/system/$u.service.d"
+    cat > "$root/etc/systemd/system/$u.service.d/nibos-after-ui.conf" <<'UNIT'
+[Unit]
+After=dslot.service
+UNIT
+done
+
+# Unused early mounts, targets, sockets and sysinit services (no TPM2, hibernation,
+# EFI, binfmt, hugepages, FUSE control, POSIX mqueue, tracing, repart, dm-event,
+# coredump, cryptenroll, factory-reset, sysext, sysupdate or interactive password
+# prompts): fewer units for PID 1 to load, order and start before the boot UI.
+for u in dev-hugepages.mount dev-mqueue.mount sys-fs-fuse-connections.mount \
+         sys-kernel-tracing.mount proc-sys-fs-binfmt_misc.automount \
+         clonesetup.target cryptsetup.target imports.target \
+         integritysetup.target veritysetup.target \
+         dm-event.socket systemd-ask-password.socket systemd-bootctl.socket \
+         systemd-coredump.socket systemd-creds.socket systemd-cryptenroll.socket \
+         systemd-factory-reset.socket systemd-hostnamed.socket \
+         systemd-importd.socket systemd-journalctl.socket \
+         systemd-machined.socket systemd-mute-console.socket \
+         systemd-pcrextend.socket systemd-pcrlock.socket \
+         systemd-repart.socket systemd-storage-block.socket \
+         systemd-storage-fs.socket systemd-sysext.socket \
+         systemd-sysinstall.socket systemd-sysupdate.socket \
+         ldconfig.service systemd-binfmt.service \
+         systemd-boot-random-seed.service systemd-firstboot.service \
+         systemd-hibernate-clear.service systemd-hwdb-update.service \
+         systemd-journal-catalog-update.service systemd-machine-id-commit.service \
+         systemd-repart.service systemd-sysusers.service \
+         systemd-update-done.service systemd-ask-password-console.path \
+         systemd-ask-password-wall.path systemd-pcrmachine.service \
+         systemd-pcrnvdone.service systemd-pcrosseparator.service \
+         systemd-pcrphase-sysinit.service systemd-pcrphase.service \
+         systemd-pcrproduct.service systemd-tpm2-setup-early.service \
+         systemd-tpm2-setup.service; do
+    ln -sf /dev/null "$root/etc/systemd/system/$u"
 done
 
 # tmpfiles runs over /dev twice: "early" (--graceful, for users that don't

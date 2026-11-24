@@ -4,8 +4,8 @@
 Description=Apply provision.toml
 DefaultDependencies=no
 RequiresMountsFor=/var/lib/nibos/state
-After=local-fs.target systemd-udev-settle.service
-Before=network-pre.target iwd.service sshd.socket getty@tty1.service dslot.service sysinit.target shutdown.target
+After=dslot.service
+Before=network-pre.target iwd.service sshd.socket getty@tty1.service sysinit.target shutdown.target
 Wants=network-pre.target
 Conflicts=shutdown.target
 
