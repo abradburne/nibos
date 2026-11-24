@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Wed, 25 Nov 2026 08:35:00 +0900
+Subject: [PATCH] rockchip: rk3568: RG DS: run the CPU at 1608 MHz in Falcon SPL
+
+Patch 0002 raised vdd_cpu to 1.1 V and ARMCLK to 1608 MHz in U-Boot
+proper's rk_board_late_init(). Falcon mode skips U-Boot proper, so SPL
+and the first ~360 ms of Linux (before arm-scmi cpufreq probes) stayed at
+816 MHz.
+
+Add bootph-pre-ram to vdd_cpu (silergy,syr827 on i2c0, which already has
+bootph-pre-ram for the RK817 PMIC) and apply the same 1.1 V / 1608 MHz
+operating point in Falcon SPL right after confirming the A-button escape
+hatch is not held. Any failure leaves the cores at 816 MHz.
+
+Upstream status: board-specific (goes with the Falcon mode and 1608 MHz
+patches).
+---
+ arch/arm/dts/rk3568-anbernic-rg-ds-u-boot.dtsi |  7 +++++
+ arch/arm/mach-rockchip/rk3568/rk3568.c         | 40 ++++++++++++++++++++++++++
+ 2 files changed, 47 insertions(+)
+
+diff --git a/arch/arm/dts/rk3568-anbernic-rg-ds-u-boot.dtsi b/arch/arm/dts/rk3568-anbernic-rg-ds-u-boot.dtsi
+index ec703c47..aa404f52 100644
+--- a/arch/arm/dts/rk3568-anbernic-rg-ds-u-boot.dtsi
++++ b/arch/arm/dts/rk3568-anbernic-rg-ds-u-boot.dtsi
+@@ -47,3 +47,10 @@
+ &pmu_io_domains {
+ 	bootph-pre-ram;
+ };
++
++/*
++ * 1608 MHz in Falcon SPL: vdd_cpu (syr827 on i2c0) must be raised to 1.1 V.
++ */
++&vdd_cpu {
++	bootph-pre-ram;
++};
+diff --git a/arch/arm/mach-rockchip/rk3568/rk3568.c b/arch/arm/mach-rockchip/rk3568/rk3568.c
+index 6ea72acf..4fd51544 100644
+--- a/arch/arm/mach-rockchip/rk3568/rk3568.c
++++ b/arch/arm/mach-rockchip/rk3568/rk3568.c
+@@ -377,6 +377,43 @@ static unsigned long ab_pick(struct mmc *mmc, unsigned long base)
+ }
+ #endif
+ 
++#if CONFIG_IS_ENABLED(DM_REGULATOR_FAN53555)
++#include <bootstage.h>
++#include <clk.h>
++#include <dm/uclass.h>
++#include <power/regulator.h>
++
++#define SPL_BOOT_CPU_UV		1100000
++#define SPL_BOOT_CPU_HZ		1608000000
++
++static void spl_cpu_1608mhz(void)
++{
++	struct udevice *reg, *cru;
++	struct clk clk = { .id = ARMCLK };
++	int ret;
++
++	ret = regulator_get_by_platname("vdd_cpu", &reg);
++	if (!ret)
++		ret = regulator_set_value(reg, SPL_BOOT_CPU_UV);
++	if (ret)
++		return;
++	udelay(1000);	/* ramps at 2.3 mV/us */
++	if (regulator_get_value(reg) < SPL_BOOT_CPU_UV)
++		return;
++
++	ret = uclass_get_device_by_driver(UCLASS_CLK,
++					  DM_DRIVER_GET(rockchip_rk3568_cru),
++					  &cru);
++	if (ret)
++		return;
++	clk.dev = cru;
++	/* clk_rk3568.c only records the first ARMCLK rate and sets the next */
++	clk_set_rate(&clk, SPL_BOOT_CPU_HZ);
++	clk_set_rate(&clk, SPL_BOOT_CPU_HZ);
++	bootstage_mark_name(BOOTSTAGE_ID_ALLOC, "cpu_1608mhz");
++}
++#endif
++
+ unsigned long board_spl_mmc_get_uboot_raw_sector(struct mmc *mmc,
+ 						 unsigned long raw_sect)
+ {
+@@ -384,6 +421,9 @@ unsigned long board_spl_mmc_get_uboot_raw_sector(struct mmc *mmc,
+ 		return FALLBACK_SECTOR;
+ 
+ #if CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR == 0x28000
++#if CONFIG_IS_ENABLED(DM_REGULATOR_FAN53555)
++	spl_cpu_1608mhz();
++#endif
+ 	return ab_pick(mmc, raw_sect);
+ #else
+ 	return raw_sect;
