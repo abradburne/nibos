@@ -20,11 +20,9 @@ in_vm bash -c "cd '$here' && mkdir -p out && gcc -O2 -static -o out/nibos-readah
 # The list names files in the DSlot user's home as @HOME@.
 sed "s|@HOME@|/home/$NIBOS_USER|g" "$here/readahead.list" > "$here/out/readahead.list"
 scp -q "${ssh_opts[@]}" "$here/out/nibos-readahead" "$here/out/readahead.list" "$target:/tmp/"
-ssh "${ssh_opts[@]}" "$target" "U=$NIBOS_USER sh -s" <<'EOF'
+ssh "${ssh_opts[@]}" "$target" "sh -s" <<'EOF'
 set -e
 sudo install -D -m 755 /tmp/nibos-readahead /etc/systemd/system-generators/nibos-readahead
-cache=$(find "/home/$U/.cache/mesa_shader_cache" -type f 2>/dev/null | sort)
-awk -v cache="$cache" "{ print } /mesa_shader_cache\/index\$/ && cache != \"\" { print cache }" /tmp/readahead.list |
-    sudo install -D -m 644 /dev/stdin /etc/nibos/readahead.list
-echo "$(grep -c ^/ /etc/nibos/readahead.list) files listed"
+sudo install -D -m 644 /tmp/readahead.list /etc/nibos/readahead.list
+echo "$(grep -c ^/ /etc/nibos/readahead.list) entries listed"
 EOF

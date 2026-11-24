@@ -15,7 +15,9 @@
  *
  * Static, so that it does not itself wait for the dynamic loader and libc to be read.
  */
+#include <errno.h>
 #include <fcntl.h>
+#include <glob.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +29,7 @@
 #include <unistd.h>
 
 #define CHUNK (128 << 10)
+#define STARTED_LOCK "/run/nibos-readahead.started"
 
 static double boottime(void)
 {
@@ -77,14 +80,48 @@ static int record(const char *listfile)
 	return 0;
 }
 
+static int upgraded = 0;
+
+static void maybe_upgrade_ioprio(double start)
+{
+	if (!upgraded && boottime() - start >= 0.35) {
+		upgraded = 1;
+		/* PID 1 has finished loading units (~0.35 s after generators); switch from IDLE
+		 * to lowest best-effort so udevd cannot starve Mesa readahead while DSlot (BE prio 0)
+		 * still preempts us. */
+		syscall(SYS_ioprio_set, 1, 0, (2 << 13) | 7);
+		setpriority(PRIO_PROCESS, 0, 10);
+	}
+}
+
+static void read_range(int fd, long long off, long long len, char *buf, long long *total, double start)
+{
+	for (long long done = 0; len < 0 || done < len;) {
+		maybe_upgrade_ioprio(start);
+		size_t want = len < 0 || len - done > CHUNK ? CHUNK : (size_t)(len - done);
+		ssize_t n = pread(fd, buf, want, off + done);
+		if (n <= 0)
+			break;
+		done += n;
+		*total += n;
+	}
+}
+
 int main(int argc, char **argv)
 {
 	if (argc == 3 && strcmp(argv[1], "--record") == 0)
 		return record(argv[2]);
+	/* Run once per boot: nibos-splash starts this early; systemd's generator pass skips if already started. */
+	int lock = open(STARTED_LOCK, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0644);
+	if (lock < 0 && errno == EEXIST)
+		return 0;
+	if (lock >= 0)
+		close(lock);
 	if (fork() != 0)
 		return 0;
 	setsid();
-	/* IOPRIO_WHO_PROCESS, this process, IOPRIO_CLASS_IDLE. */
+	/* Start at IOPRIO_CLASS_IDLE so PID 1's own unit loading gets 100% SD priority;
+	 * maybe_upgrade_ioprio() upgrades to BE prio 7 after 350 ms. */
 	syscall(SYS_ioprio_set, 1, 0, 3 << 13);
 	setpriority(PRIO_PROCESS, 0, 19);
 	FILE *list = fopen("/etc/nibos/readahead.list", "r");
@@ -98,8 +135,23 @@ int main(int argc, char **argv)
 	while (fgets(line, sizeof line, list)) {
 		char p[4096];
 		long long off = 0, len = -1;
-		if (line[0] != '/' || sscanf(line, "%4095s %lld %lld", p, &off, &len) < 1)
+		int fields = sscanf(line, "%4095s %lld %lld", p, &off, &len);
+		if (line[0] != '/' || fields < 1)
 			continue;
+		if (fields == 1 && (strchr(p, '*') || strchr(p, '?'))) {
+			glob_t g;
+			if (glob(p, GLOB_NOSORT, NULL, &g) == 0) {
+				for (size_t i = 0; i < g.gl_pathc; i++) {
+					int gfd = open(g.gl_pathv[i], O_RDONLY | O_CLOEXEC);
+					if (gfd >= 0) {
+						read_range(gfd, 0, -1, buf, &total, start);
+						close(gfd);
+					}
+				}
+				globfree(&g);
+			}
+			continue;
+		}
 		if (strcmp(p, path) != 0) {
 			if (fd >= 0)
 				close(fd);
@@ -108,14 +160,7 @@ int main(int argc, char **argv)
 		}
 		if (fd < 0)
 			continue;
-		for (long long done = 0; len < 0 || done < len;) {
-			size_t want = len < 0 || len - done > CHUNK ? CHUNK : (size_t)(len - done);
-			ssize_t n = pread(fd, buf, want, off + done);
-			if (n <= 0)
-				break;
-			done += n;
-			total += n;
-		}
+		read_range(fd, off, len, buf, &total, start);
 	}
 	if (fd >= 0)
 		close(fd);

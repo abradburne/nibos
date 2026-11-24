@@ -97,6 +97,10 @@ fn main() {
         if unsafe { libc::fork() } == 0 {
             let t0 = boottime();
             if by_charger() {
+                if charger_online() {
+                    let _ = std::fs::create_dir_all("/run/nibos");
+                    let _ = std::fs::write(CHARGE_BOOT, "");
+                }
                 kmsg("nibos-splash: switched on by the charger: no picture (it charges asleep)");
                 unsafe { libc::_exit(0) };
             }
@@ -177,31 +181,40 @@ fn read_picture(paths: &[&str]) -> Result<Vec<Screen>, String> {
     Ok(screens)
 }
 
-/// Whether the PMIC says the charger, and not the power key, switched the device on
-/// (`NIBOS_POWER_ON_SOURCE="BUS ADDR REG CHARGER-BIT KEY-BIT"`, as nibos-charge-boot reads it).
-/// False whenever it can't tell: the picture goes up.
-fn by_charger() -> bool {
+fn board_value(key: &str) -> Option<String> {
     let conf: String = BOARD
         .iter()
         .filter_map(|p| std::fs::read_to_string(p).ok())
         .collect::<Vec<_>>()
         .join("\n");
-    let Some(value) = conf
-        .lines()
-        .filter_map(|l| l.trim().strip_prefix("NIBOS_POWER_ON_SOURCE="))
+    let prefix = format!("{key}=");
+    conf.lines()
+        .filter_map(|l| l.trim().strip_prefix(&prefix))
         .next_back()
-    else {
+        .map(|v| v.trim_matches(|c| c == '"' || c == '\'').to_owned())
+}
+
+/// Whether the charger named in `NIBOS_CHARGER` is currently plugged in.
+fn charger_online() -> bool {
+    let Some(charger) = board_value("NIBOS_CHARGER") else {
+        return false;
+    };
+    std::fs::read_to_string(format!("/sys/class/power_supply/{charger}/online"))
+        .is_ok_and(|v| v.trim() == "1")
+}
+
+/// Whether the PMIC says the charger, and not the power key, switched the device on
+/// (`NIBOS_POWER_ON_SOURCE="BUS ADDR REG CHARGER-BIT KEY-BIT"`, as nibos-charge-boot reads it).
+/// False whenever it can't tell: the picture goes up.
+fn by_charger() -> bool {
+    let Some(value) = board_value("NIBOS_POWER_ON_SOURCE") else {
         return false;
     };
     let num = |s: &str| match s.strip_prefix("0x") {
         Some(h) => u32::from_str_radix(h, 16).ok(),
         None => s.parse().ok(),
     };
-    let f: Vec<u32> = value
-        .trim_matches(|c| c == '"' || c == '\'')
-        .split_whitespace()
-        .filter_map(num)
-        .collect();
+    let f: Vec<u32> = value.split_whitespace().filter_map(num).collect();
     let [bus, addr, reg, charger, key] = f[..] else {
         return false;
     };

@@ -12,8 +12,87 @@ pub struct Screen {
     pub px: Vec<u8>,
 }
 
+const fn iow(nr: u32, size: usize) -> c_ulong {
+    ((1u32 << 30) | ((size as u32) << 16) | (0x64 << 8) | nr) as c_ulong
+}
+
 const fn iowr(nr: u32, size: usize) -> c_ulong {
     ((3u32 << 30) | ((size as u32) << 16) | (0x64 << 8) | nr) as c_ulong
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct SetClientCap {
+    capability: u64,
+    value: u64,
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct GetPlaneRes {
+    plane_id_ptr: u64,
+    count_planes: u32,
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct GetPlane {
+    plane_id: u32,
+    crtc_id: u32,
+    fb_id: u32,
+    possible_crtcs: u32,
+    gamma_size: u32,
+    count_format_types: u32,
+    format_type_ptr: u64,
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct ObjGetProperties {
+    props_ptr: u64,
+    prop_values_ptr: u64,
+    count_props: u32,
+    obj_id: u32,
+    obj_type: u32,
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct GetProperty {
+    values_ptr: u64,
+    enum_blob_ptr: u64,
+    prop_id: u32,
+    flags: u32,
+    name: [u8; 32],
+    count_values: u32,
+    count_enum_blobs: u32,
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct CreateBlob {
+    data: u64,
+    length: u32,
+    blob_id: u32,
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct DestroyBlob {
+    blob_id: u32,
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct Atomic {
+    flags: u32,
+    count_objs: u32,
+    objs_ptr: u64,
+    count_props_ptr: u64,
+    props_ptr: u64,
+    prop_values_ptr: u64,
+    reserved: u64,
+    user_data: u64,
 }
 
 #[repr(C)]
@@ -130,15 +209,31 @@ struct FbCmd {
     handle: u32,
 }
 
+const SET_CLIENT_CAP: c_ulong = iow(0x0D, std::mem::size_of::<SetClientCap>());
 const GETRESOURCES: c_ulong = iowr(0xA0, std::mem::size_of::<CardRes>());
 const GETCRTC: c_ulong = iowr(0xA1, std::mem::size_of::<Crtc>());
 const SETCRTC: c_ulong = iowr(0xA2, std::mem::size_of::<Crtc>());
 const GETENCODER: c_ulong = iowr(0xA6, std::mem::size_of::<GetEncoder>());
 const GETCONNECTOR: c_ulong = iowr(0xA7, std::mem::size_of::<GetConnector>());
+const GETPROPERTY: c_ulong = iowr(0xAA, std::mem::size_of::<GetProperty>());
 const ADDFB: c_ulong = iowr(0xAE, std::mem::size_of::<FbCmd>());
 const CREATE_DUMB: c_ulong = iowr(0xB2, std::mem::size_of::<CreateDumb>());
 const MAP_DUMB: c_ulong = iowr(0xB3, std::mem::size_of::<MapDumb>());
+const GETPLANERESOURCES: c_ulong = iowr(0xB5, std::mem::size_of::<GetPlaneRes>());
+const GETPLANE: c_ulong = iowr(0xB6, std::mem::size_of::<GetPlane>());
+const OBJ_GETPROPERTIES: c_ulong = iowr(0xB9, std::mem::size_of::<ObjGetProperties>());
+const ATOMIC: c_ulong = iowr(0xBC, std::mem::size_of::<Atomic>());
+const CREATEPROPBLOB: c_ulong = iowr(0xBD, std::mem::size_of::<CreateBlob>());
+const DESTROYPROPBLOB: c_ulong = iowr(0xBE, std::mem::size_of::<DestroyBlob>());
 const DROP_MASTER: c_ulong = (0x64 << 8) | 0x1f;
+
+const DRM_CLIENT_CAP_UNIVERSAL_PLANES: u64 = 2;
+const DRM_CLIENT_CAP_ATOMIC: u64 = 3;
+const DRM_MODE_OBJECT_CRTC: u32 = 0xcccc_cccc;
+const DRM_MODE_OBJECT_CONNECTOR: u32 = 0xc0c0_c0c0;
+const DRM_MODE_OBJECT_PLANE: u32 = 0xeeee_eeee;
+const DRM_MODE_ATOMIC_ALLOW_MODESET: u32 = 0x0400;
+const DRM_PLANE_TYPE_PRIMARY: u64 = 1;
 
 fn ioctl<T>(fd: i32, req: c_ulong, arg: &mut T) -> Result<(), String> {
     let r = unsafe { libc::ioctl(fd, req as _, arg as *mut T) };
@@ -217,6 +312,7 @@ impl Drop for Buffer {
 
 pub struct Output {
     pub crtc: u32,
+    pub crtc_index: u32,
     pub connector: u32,
     pub mode: ModeInfo,
 }
@@ -231,8 +327,9 @@ impl Kms {
     /// The first two connected outputs of the first KMS card, on the CRTCs the console lit them
     /// with, or the first free CRTC each may use when it hasn't yet.
     pub fn open() -> Result<Kms, String> {
-        let (fd, crtcs, connectors) = (0..4)
-            .find_map(|i| {
+        let mut found = None;
+        for _ in 0..40 {
+            found = (0..4).find_map(|i| {
                 let path = CString::new(format!("/dev/dri/card{i}")).unwrap();
                 let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR | libc::O_CLOEXEC) };
                 if fd < 0 {
@@ -254,8 +351,13 @@ impl Kms {
                 };
                 ioctl(fd, GETRESOURCES, &mut res2).ok()?;
                 Some((fd, crtcs, conns))
-            })
-            .ok_or("no KMS card")?;
+            });
+            if found.is_some() {
+                break;
+            }
+            unsafe { libc::usleep(5_000) };
+        }
+        let (fd, crtcs, connectors) = found.ok_or("no KMS card")?;
         let mut outputs: Vec<Output> = Vec::new();
         for id in connectors {
             let mut c = GetConnector {
@@ -288,20 +390,22 @@ impl Kms {
             };
             ioctl(fd, GETENCODER, &mut e)?;
             let free = |crtc: &u32| !outputs.iter().any(|o| o.crtc == *crtc);
-            let crtc = if e.crtc_id != 0 && free(&e.crtc_id) {
-                e.crtc_id
+            let (crtc_index, crtc) = if e.crtc_id != 0 && free(&e.crtc_id) {
+                let idx = crtcs.iter().position(|&c| c == e.crtc_id).unwrap_or(0) as u32;
+                (idx, e.crtc_id)
             } else {
                 match crtcs
                     .iter()
                     .enumerate()
                     .find(|(i, c)| e.possible_crtcs & (1 << i) != 0 && free(c))
                 {
-                    Some((_, c)) => *c,
+                    Some((i, c)) => (i as u32, *c),
                     None => continue,
                 }
             };
             outputs.push(Output {
                 crtc,
+                crtc_index,
                 connector: id,
                 mode: modes[0],
             });
@@ -317,13 +421,190 @@ impl Kms {
     }
 
     /// Each picture into a dumb buffer of its own, set on its output. Returns how many.
+    /// With two outputs and deferred fbcon takeover (neither panel lit yet), commits all
+    /// outputs in one atomic modeset so DRM prepares both panels in parallel before enabling
+    /// them (saving one panel's sleep-out wait); falls back to legacy SETCRTC if anything fails.
+    #[allow(dead_code)]
     pub fn show(&self, screens: &[Screen]) -> Result<usize, String> {
+        let mut pairs: Vec<(&Output, Buffer)> = Vec::new();
         for (o, s) in self.outputs.iter().zip(screens) {
             let mut b = self.buffer(o)?;
             b.put(s);
-            self.set(o, &b)?;
+            pairs.push((o, b));
         }
-        Ok(self.outputs.len().min(screens.len()))
+        if pairs.len() > 1 && self.show_atomic(&pairs).is_ok() {
+            return Ok(pairs.len());
+        }
+        for (o, b) in &pairs {
+            self.set(o, b)?;
+        }
+        Ok(pairs.len())
+    }
+
+    #[allow(dead_code)]
+    fn prop_id(&self, obj_id: u32, obj_type: u32, wanted: &str) -> Option<(u32, u64)> {
+        let mut gp = ObjGetProperties {
+            obj_id,
+            obj_type,
+            ..Default::default()
+        };
+        ioctl(self.fd, OBJ_GETPROPERTIES, &mut gp).ok()?;
+        let n = gp.count_props as usize;
+        if n == 0 {
+            return None;
+        }
+        let mut ids = vec![0u32; n];
+        let mut vals = vec![0u64; n];
+        gp.props_ptr = ids.as_mut_ptr() as u64;
+        gp.prop_values_ptr = vals.as_mut_ptr() as u64;
+        ioctl(self.fd, OBJ_GETPROPERTIES, &mut gp).ok()?;
+        for (id, val) in ids.into_iter().zip(vals) {
+            let mut prop = GetProperty {
+                prop_id: id,
+                ..Default::default()
+            };
+            if ioctl(self.fd, GETPROPERTY, &mut prop).is_ok() {
+                let len = prop
+                    .name
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(prop.name.len());
+                if &prop.name[..len] == wanted.as_bytes() {
+                    return Some((id, val));
+                }
+            }
+        }
+        None
+    }
+
+    #[allow(dead_code)]
+    fn show_atomic(&self, pairs: &[(&Output, Buffer)]) -> Result<(), String> {
+        let mut cap = SetClientCap {
+            capability: DRM_CLIENT_CAP_UNIVERSAL_PLANES,
+            value: 1,
+        };
+        ioctl(self.fd, SET_CLIENT_CAP, &mut cap)?;
+        cap = SetClientCap {
+            capability: DRM_CLIENT_CAP_ATOMIC,
+            value: 1,
+        };
+        ioctl(self.fd, SET_CLIENT_CAP, &mut cap)?;
+
+        let mut pres = GetPlaneRes::default();
+        ioctl(self.fd, GETPLANERESOURCES, &mut pres)?;
+        if pres.count_planes == 0 {
+            return Err("no planes".into());
+        }
+        let mut plane_ids = vec![0u32; pres.count_planes as usize];
+        pres.plane_id_ptr = plane_ids.as_mut_ptr() as u64;
+        ioctl(self.fd, GETPLANERESOURCES, &mut pres)?;
+
+        let mut planes: Vec<(u32, u32)> = Vec::new();
+        for pid in plane_ids {
+            let mut p = GetPlane {
+                plane_id: pid,
+                ..Default::default()
+            };
+            if ioctl(self.fd, GETPLANE, &mut p).is_err() {
+                continue;
+            }
+            if let Some((_, kind)) = self.prop_id(pid, DRM_MODE_OBJECT_PLANE, "type") {
+                if kind == DRM_PLANE_TYPE_PRIMARY {
+                    planes.push((pid, p.possible_crtcs));
+                }
+            }
+        }
+
+        let mut blobs: Vec<u32> = Vec::new();
+        let result: Result<(), String> = (|| {
+            let mut objs: Vec<u32> = Vec::new();
+            let mut counts: Vec<u32> = Vec::new();
+            let mut props: Vec<u32> = Vec::new();
+            let mut values: Vec<u64> = Vec::new();
+            let mut used_planes: Vec<u32> = Vec::new();
+
+            for (o, b) in pairs {
+                let &(plane, _) = planes
+                    .iter()
+                    .find(|&&(pid, mask)| {
+                        mask & (1 << o.crtc_index) != 0 && !used_planes.contains(&pid)
+                    })
+                    .ok_or("no primary plane for CRTC")?;
+                used_planes.push(plane);
+
+                let mut blob = CreateBlob {
+                    data: &o.mode as *const ModeInfo as u64,
+                    length: std::mem::size_of::<ModeInfo>() as u32,
+                    blob_id: 0,
+                };
+                ioctl(self.fd, CREATEPROPBLOB, &mut blob)?;
+                blobs.push(blob.blob_id);
+
+                let conn_crtc = self
+                    .prop_id(o.connector, DRM_MODE_OBJECT_CONNECTOR, "CRTC_ID")
+                    .ok_or("no connector CRTC_ID")?
+                    .0;
+                let crtc_active = self
+                    .prop_id(o.crtc, DRM_MODE_OBJECT_CRTC, "ACTIVE")
+                    .ok_or("no CRTC ACTIVE")?
+                    .0;
+                let crtc_mode = self
+                    .prop_id(o.crtc, DRM_MODE_OBJECT_CRTC, "MODE_ID")
+                    .ok_or("no CRTC MODE_ID")?
+                    .0;
+                let pp = |name| {
+                    self.prop_id(plane, DRM_MODE_OBJECT_PLANE, name)
+                        .map(|(id, _)| id)
+                        .ok_or_else(|| format!("no plane {name}"))
+                };
+                let (w, h) = (o.mode.hdisplay as u64, o.mode.vdisplay as u64);
+                let mut add = |obj: u32, pairs: &[(u32, u64)]| {
+                    objs.push(obj);
+                    counts.push(pairs.len() as u32);
+                    for &(p, v) in pairs {
+                        props.push(p);
+                        values.push(v);
+                    }
+                };
+                add(o.connector, &[(conn_crtc, o.crtc as u64)]);
+                add(
+                    o.crtc,
+                    &[(crtc_active, 1), (crtc_mode, blob.blob_id as u64)],
+                );
+                add(
+                    plane,
+                    &[
+                        (pp("FB_ID")?, b.fb as u64),
+                        (pp("CRTC_ID")?, o.crtc as u64),
+                        (pp("SRC_X")?, 0),
+                        (pp("SRC_Y")?, 0),
+                        (pp("SRC_W")?, w << 16),
+                        (pp("SRC_H")?, h << 16),
+                        (pp("CRTC_X")?, 0),
+                        (pp("CRTC_Y")?, 0),
+                        (pp("CRTC_W")?, w),
+                        (pp("CRTC_H")?, h),
+                    ],
+                );
+            }
+            let mut commit = Atomic {
+                flags: DRM_MODE_ATOMIC_ALLOW_MODESET,
+                count_objs: objs.len() as u32,
+                objs_ptr: objs.as_ptr() as u64,
+                count_props_ptr: counts.as_ptr() as u64,
+                props_ptr: props.as_ptr() as u64,
+                prop_values_ptr: values.as_ptr() as u64,
+                reserved: 0,
+                user_data: 0,
+            };
+            ioctl(self.fd, ATOMIC, &mut commit)
+        })();
+
+        for blob_id in blobs {
+            let mut d = DestroyBlob { blob_id };
+            let _ = ioctl(self.fd, DESTROYPROPBLOB, &mut d);
+        }
+        result
     }
 
     /// A dumb buffer the size of `o`'s mode, black, mapped for writing. It stays on the card
