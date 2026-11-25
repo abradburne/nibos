@@ -1,11 +1,11 @@
 # nibos: Mesa with only the RG DS+'s GPU (Mali-G52, Panfrost) and no LLVM at run time.
-# Based on Arch Linux ARM's extra/mesa 1:26.2.4-1 (see README.md for what changed).
+# Based on Arch Linux ARM's extra/mesa 1:26.3.1-3 (see README.md for what changed).
 
 pkgbase=mesa-nibos
 pkgname=(mesa-nibos vulkan-panfrost-nibos)
-pkgver=26.2.4
+pkgver=26.3.1
 _pkgver=${pkgver/[a-z]/-&}
-pkgrel=4
+pkgrel=1
 epoch=1
 pkgdesc="Mesa OpenGL/GLES/EGL/GBM for nibOS: Panfrost only, no LLVM"
 url="https://www.mesa3d.org/"
@@ -56,9 +56,9 @@ options=(!lto)
 source=("https://archive.mesa3d.org/mesa-$_pkgver.tar.xz"
         0001-panfrost-copy-indices-before-scanning-them.patch
         0002-panfrost-keep-cached-bos-mapped.patch)
-sha256sums=('bce5f7fbebb934373b86c999a064d52fb5065878dc57f287f95346648ec832e9'
+sha256sums=('4e4e438eac7b840a9383988cbb7c08dad8041da544b9319fc26d319fa7348961'
             '306eae2a8d71e460de142c4f6e07590e2864d0f0eb342c65791f56fef2a15893'
-            'aa4364d2f5747668522bb24a46763372665664ab26f907f1e4b05a35c4400779')
+            '18630e4cfc0ad7d1b9aaf637c4cccd50ef84cf302a3389123a5c2fedc8528bb4')
 
 prepare() {
   cd mesa-$_pkgver

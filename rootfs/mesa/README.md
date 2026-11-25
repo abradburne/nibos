@@ -1,6 +1,6 @@
 # mesa-nibos: Panfrost only, no LLVM
 
-Arch Linux ARM's `extra/mesa` (1:26.2.4-1) cut down to what the RG DS+ uses (the RK3568's Mali-G52, Panfrost),
+Arch Linux ARM's `extra/mesa` (1:26.3.1-3) cut down to what the RG DS+ uses (the RK3568's Mali-G52, Panfrost),
 so GL starts fast at boot. Arch's libgallium is 54 MB and pulls in libLLVM (171 MB); loading
 them cold from the SD card cost ~1.9 s of DSlot's start. This one is 21 MB with no LLVM and no
 SPIRV-Tools (`ldd` shows neither). The package is 3.5 MB.
@@ -31,7 +31,7 @@ What changed against Arch's PKGBUILD:
   `mesa_clc`, which needs clang, LLVM and libclc. The first build makes just `mesa_clc` and
   `vtn_bindgen2` with LLVM. The second builds the driver with `-D mesa-clc=system`, which
   takes them from `PATH`, so nothing in the package links LLVM.
-- `VERSION` is `26.2.4-nibos<epoch>.<pkgrel>`, `26.2.4-nibos1.4` now (Arch's is `-arch1.1`), so it shows in
+- `VERSION` is `26.3.1-nibos<epoch>.<pkgrel>`, `26.3.1-nibos1.1` now (Arch's is `-arch1.3`), so it shows in
   `GL_VERSION` and in libgallium's file name.
 
 - One patch, `0001-panfrost-copy-indices-before-scanning-them.patch` (`pkgrel=3`). Panfrost

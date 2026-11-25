@@ -1,6 +1,6 @@
---- a/src/gallium/drivers/panfrost/pan_bo.c	2026-11-07 17:14:10.725439797 +0900
-+++ b/src/gallium/drivers/panfrost/pan_bo.c	2026-11-07 17:14:23.998749414 +0900
-@@ -111,6 +111,14 @@
+--- a/src/gallium/drivers/panfrost/pan_bo.c
++++ b/src/gallium/drivers/panfrost/pan_bo.c
+@@ -129,6 +129,14 @@ panfrost_bo_free(struct panfrost_bo *bo)
     struct pan_kmod_vm *vm = bo->dev->kmod.vm;
     uint64_t gpu_va = bo->ptr.gpu;
  
@@ -12,10 +12,10 @@
 +      abort();
 +   }
 +
-    /* BO will be freed with the sparse array, but zero to indicate free */
-    memset(bo, 0, sizeof(*bo));
- 
-@@ -335,22 +343,6 @@
+    /* reset_bo_slot() will undo the poisoning done in simple_mtx_destroy(), but
+     * we need it for the valgrind annotation.
+     */
+@@ -322,22 +330,6 @@ panfrost_bo_mmap(struct panfrost_bo *bo)
     return 0;
  }
  
@@ -38,7 +38,7 @@
  struct panfrost_bo *
  panfrost_bo_create(struct panfrost_device *dev, size_t size, uint32_t flags,
                     const char *label)
-@@ -456,9 +448,11 @@
+@@ -444,9 +436,11 @@ panfrost_bo_unreference(struct panfrost_bo *bo)
      * the slot has been returned already.
      */
     if (bo->dev && p_atomic_read(&bo->refcnt) == 0) {
