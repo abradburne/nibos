@@ -21,8 +21,13 @@ if [ -z "$f" ]; then
     f=$dir/boot-$(date +%Y%m%d-%H%M%S).txt
     mkdir -p /run/nibos && echo "$f" > "$current"
 fi
-{ echo "nibOS: $(date) (${1:-boot})"; uname -a; ip addr; dmesg; journalctl -b --no-pager | tail -n "$lines"; } > "$f.new" 2>&1
+rm -f "$dir"/boot-*.txt.new
+{ echo "nibOS: $(date) (${1:-boot})"; uname -a; ip addr; dmesg; journalctl -b -n "$lines" --no-pager; } > "$f.new" 2>&1
 mv -f "$f.new" "$f"
 # shellcheck disable=SC2012 # the names are this script's own, boot-DATE.txt
 ls -1t "$dir"/boot-*.txt | tail -n +11 | xargs -r rm -f
-sync
+# At power-off/restart, mnt-roms.mount unmounts right after and systemd-shutdown syncs all
+# filesystems; a global sync here stalls shutdown for 3-10 s behind unrelated dirty pages.
+if [ "$(systemctl is-system-running 2>/dev/null || true)" != stopping ]; then
+    sync -f "$f" 2>/dev/null || true
+fi

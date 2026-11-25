@@ -30,26 +30,67 @@ parts() {
     echo ".local/share/dslot dslot"
 }
 
+# Copy regular files and directories from $1 to $2, skipping symlinks (exFAT does not support
+# symlinks, and a port may symlink its config into /mnt/ds/Roms), the RetroAchievements token,
+# and PulseAudio's machine files.
+copy_tree() {
+    src=$1
+    dst=$2
+    mkdir -p "$dst"
+    (
+        cd "$src"
+        find . \( -path './pulse' -o -path './pulse/*' -o -path './dslot/retroachievements.token' \) -prune \
+            -o -type d -exec sh -c 'dst=$1; shift; for d do mkdir -p "$dst/$d"; done' _ "$dst" {} +
+        find . \( -path './pulse' -o -path './pulse/*' -o -path './dslot/retroachievements.token' \) -prune \
+            -o -type f -exec sh -c 'dst=$1; shift; for f do cp "$f" "$dst/$f"; done' _ "$dst" {} +
+    )
+}
+
+# Fast stat fingerprint of what would be copied, so unchanged periodic/shutdown runs do no I/O.
+fingerprint() {
+    parts | while read -r from to; do
+        [ -d "$home/$from" ] || continue
+        (
+            cd "$home/$from"
+            find . \( -path './pulse' -o -path './pulse/*' -o -path './dslot/retroachievements.token' \) -prune \
+                -o -type f -printf "$to/%P\t%s\t%T@\n"
+        )
+    done | LC_ALL=C sort | sha256sum | awk '{print $1}'
+}
+
 case "${1:-}" in
 save)
     # No drive (not mounted, no card): nothing to do, and never an error that holds up sleep.
     [ -d "$drive" ] && mkdir -p "$copy" 2>/dev/null || exit 0
+    stamp=""
+    sig=""
+    if [ -z "${ROOT:-}" ] && [ -z "${HOME_DIR:-}" ]; then
+        stamp=$copy/.stamp
+        sig=$(fingerprint)
+        if [ -f "$stamp" ] && [ "$(cat "$stamp" 2>/dev/null || true)" = "$sig" ] \
+            && [ -d "$copy/config" ] && [ ! -d "$copy.new" ]; then
+            exit 0
+        fi
+    fi
     new=$copy.new
     rm -rf "$new"
     mkdir -p "$new"
     parts | while read -r from to; do
         [ -d "$home/$from" ] || continue
-        mkdir -p "$new/$to"
-        cp -R "$home/$from/." "$new/$to/"
+        copy_tree "$home/$from" "$new/$to"
     done
-    rm -f "$new/config/dslot/retroachievements.token"
-    rm -rf "$new/config/pulse"
+    if [ -n "$stamp" ]; then
+        printf '%s\n' "$sig" > "$new/.stamp"
+    fi
     # In place of the old copy at once, so a power cut leaves one whole copy or the other.
     rm -rf "$copy.old"
     [ ! -d "$copy" ] || mv "$copy" "$copy.old"
     mv "$new" "$copy"
     rm -rf "$copy.old"
-    sync -f "$copy" 2>/dev/null || sync ;;
+    # At power-off/restart, mnt-roms.mount unmounts right after and flushes the volume.
+    if [ "$(systemctl is-system-running 2>/dev/null || true)" != stopping ]; then
+        sync -f "$copy" 2>/dev/null || sync
+    fi ;;
 restore)
     # Only runs on the first start of a freshly written image: wait for the first-boot data
     # partition and /mnt/roms here instead of ordering the unit after them on every later boot.

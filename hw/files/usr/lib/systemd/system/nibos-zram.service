@@ -14,7 +14,9 @@ ConditionPathExists=/sys/class/zram-control
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/sh -c 'dev=$(zramctl --find --size "$(awk "/MemTotal/ { print \\$2 }" /proc/meminfo)KiB" --algorithm lz4) && mkswap -q "$dev" && swapon --discard --priority 100 "$dev"'
-ExecStop=/bin/sh -c 'for d in /dev/zram*; do swapoff "$d" 2>/dev/null; zramctl --reset "$d" 2>/dev/null; done; true'
+# Skip swapoff during power-off/restart: zram is volatile RAM, and decompressing pages while
+# apps are still alive stalls shutdown for 1-8 s. Manual `systemctl stop` still tears it down.
+ExecStop=/bin/sh -c '[ "$(systemctl is-system-running 2>/dev/null)" = stopping ] && exit 0; for d in /dev/zram*; do swapoff "$d" 2>/dev/null; zramctl --reset "$d" 2>/dev/null; done; true'
 
 [Install]
 WantedBy=multi-user.target

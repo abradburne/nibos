@@ -69,6 +69,11 @@ cat > "$root/etc/systemd/system.conf.d/nibos-path.conf" <<'CONF'
 [Manager]
 DefaultEnvironment=PATH=/usr/local/sbin:/usr/local/bin:/usr/bin
 CONF
+# Cap unit stop timeouts so a stuck background service cannot hang power-off for 90 s.
+cat > "$root/etc/systemd/system.conf.d/nibos-shutdown.conf" <<'CONF'
+[Manager]
+DefaultTimeoutStopSec=5s
+CONF
 
 # Arch merges every group found in /etc/group with systemd's user database, so
 # each group lookup is two varlink calls, one of them to PID 1. Early units make
