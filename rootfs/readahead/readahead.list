@@ -19,4 +19,8 @@
 /usr/lib/libexpat.so.1
 /usr/lib/libstdc++.so.6
 /usr/lib/libgallium-*.so
+@HOME@/.cache/mesa_shader_cache_db/index
+@HOME@/.cache/mesa_shader_cache_db/*.foz
 @HOME@/.cache/mesa_shader_cache/index
+@HOME@/.config/dslot/settings.toml
+@HOME@/.local/share/dslot/stats.tsv
