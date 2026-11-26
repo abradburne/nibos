@@ -5,7 +5,6 @@
 # hardcoded libgallium-26.2.4-nibos1.2.so previously missed 1.4.so). Core libc/ld/udev/zstd are
 # already paged in by PID 1 before readahead starts. Paths that do not exist are skipped.
 # @HOME@ is the DSlot user's home (install.sh / make-arch.sh fills it in).
-/usr/bin/nibos-charge-boot
 /usr/bin/dslot
 /usr/lib/libSDL2-2.0.so.0
 /usr/lib/libSDL3.so.0
@@ -19,8 +18,6 @@
 /usr/lib/libexpat.so.1
 /usr/lib/libstdc++.so.6
 /usr/lib/libgallium-*.so
-@HOME@/.cache/mesa_shader_cache_db/index
-@HOME@/.cache/mesa_shader_cache_db/*.foz
 @HOME@/.cache/mesa_shader_cache/index
 @HOME@/.config/dslot/settings.toml
 @HOME@/.local/share/dslot/stats.tsv

@@ -41,6 +41,7 @@ use kms::{Kms, Screen};
 use std::ffi::CString;
 
 const SYSTEMD: &str = "/usr/lib/systemd/systemd";
+const READAHEAD: &str = "/etc/systemd/system-generators/nibos-readahead";
 const PICTURES: [&str; 2] = ["/usr/lib/nibos/pictures/boot.pspl", "/var/lib/dslot/splash"];
 const GOODBYE: [&str; 1] = ["/usr/lib/nibos/pictures/goodbye.pspl"];
 /// Left by nibos-charge-boot while the device charges asleep.
@@ -106,7 +107,10 @@ fn main() {
             }
             restore_backlights();
             match std::panic::catch_unwind(|| splash(t0)) {
-                Ok(Ok(kms)) => hold(&kms),
+                Ok(Ok(kms)) => {
+                    start_readahead();
+                    hold(&kms);
+                }
                 Ok(Err(e)) => kmsg(&format!("nibos-splash: {e}")),
                 Err(_) => kmsg("nibos-splash: panicked"),
             }
@@ -455,6 +459,27 @@ fn restore_backlights() {
         if (1..=max).contains(&level) {
             let _ = std::fs::write(dev.join("brightness"), format!("{level}\n"));
         }
+    }
+}
+
+/// Starts nibos-readahead immediately after the splash is on screen (~0.69 s) instead of waiting
+/// for systemd's generator pass (~1.15 s). The generator forks into its own session at idle I/O
+/// priority and returns immediately; systemd's later pass skips via `/run/nibos-readahead.started`.
+fn start_readahead() {
+    if !std::path::Path::new(READAHEAD).exists() {
+        return;
+    }
+    let pid = unsafe { libc::fork() };
+    if pid == 0 {
+        let exe = CString::new(READAHEAD).unwrap();
+        let argv = [exe.as_ptr(), std::ptr::null()];
+        unsafe {
+            libc::execv(exe.as_ptr(), argv.as_ptr());
+            libc::_exit(0);
+        }
+    } else if pid > 0 {
+        let mut status: libc::c_int = 0;
+        unsafe { libc::waitpid(pid, &mut status, 0) };
     }
 }
 

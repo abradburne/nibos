@@ -28,8 +28,11 @@
 #include <time.h>
 #include <unistd.h>
 
-#define CHUNK (128 << 10)
+#define CHUNK_EARLY (128 << 10)
+#define CHUNK_FAST  (512 << 10)
 #define STARTED_LOCK "/run/nibos-readahead.started"
+#define START_AFTER 0.85
+#define FAST_AFTER  1.55
 
 static double boottime(void)
 {
@@ -82,28 +85,34 @@ static int record(const char *listfile)
 
 static int upgraded = 0;
 
-static void maybe_upgrade_ioprio(double start)
+static void maybe_upgrade_ioprio(double now)
 {
-	if (!upgraded && boottime() - start >= 0.35) {
+	if (!upgraded && now >= FAST_AFTER) {
 		upgraded = 1;
-		/* PID 1 has finished loading units (~0.35 s after generators); switch from IDLE
-		 * to lowest best-effort so udevd cannot starve Mesa readahead while DSlot (BE prio 0)
-		 * still preempts us. */
+		/* PID 1 has finished loading units (~1.55 s from kernel start); switch from paced
+		 * early reads to full-speed best-effort prio 7 so udevd cannot starve Mesa readahead
+		 * while DSlot (Nice=-5, BE prio 0) still preempts us. */
 		syscall(SYS_ioprio_set, 1, 0, (2 << 13) | 7);
 		setpriority(PRIO_PROCESS, 0, 10);
 	}
 }
 
-static void read_range(int fd, long long off, long long len, char *buf, long long *total, double start)
+static void read_range(int fd, long long off, long long len, char *buf, long long *total)
 {
 	for (long long done = 0; len < 0 || done < len;) {
-		maybe_upgrade_ioprio(start);
-		size_t want = len < 0 || len - done > CHUNK ? CHUNK : (size_t)(len - done);
+		double now = boottime();
+		maybe_upgrade_ioprio(now);
+		size_t step = upgraded ? CHUNK_FAST : CHUNK_EARLY;
+		size_t want = len < 0 || len - done > (long long)step ? step : (size_t)(len - done);
 		ssize_t n = pread(fd, buf, want, off + done);
 		if (n <= 0)
 			break;
 		done += n;
 		*total += n;
+		/* While PID 1 is reading unit files (< 1.55 s), yield 3 ms between 128 KB chunks so
+		 * mq-deadline never stalls systemd's small random reads behind sequential bursts. */
+		if (!upgraded)
+			usleep(3000);
 	}
 }
 
@@ -120,15 +129,21 @@ int main(int argc, char **argv)
 	if (fork() != 0)
 		return 0;
 	setsid();
-	/* Start at IOPRIO_CLASS_IDLE so PID 1's own unit loading gets 100% SD priority;
-	 * maybe_upgrade_ioprio() upgrades to BE prio 7 after 350 ms. */
+	/* Let PID 1 finish loading systemd and its shared libraries uncontested (~0.70 -> 1.05 s),
+	 * then preload DSlot, SDL, and Mesa in 512 KB bursts before dslot.service launches (~1.7 s). */
+	double now = boottime();
+	if (now < START_AFTER) {
+		usleep((useconds_t)((START_AFTER - now) * 1e6));
+	}
+	/* Start at IOPRIO_CLASS_IDLE / nice 19; maybe_upgrade_ioprio() raises to BE prio 7 / nice 10
+	 * once systemd finishes unit setup (~1.45 s), while DSlot (Nice=-5, BE prio 0) still wins. */
 	syscall(SYS_ioprio_set, 1, 0, 3 << 13);
 	setpriority(PRIO_PROCESS, 0, 19);
 	FILE *list = fopen("/etc/nibos/readahead.list", "r");
 	if (!list)
 		return 0;
 	double start = boottime();
-	static char buf[CHUNK];
+	static char buf[CHUNK_FAST];
 	char line[4096 + 64], path[4096] = "";
 	int fd = -1;
 	long long total = 0;
@@ -144,7 +159,7 @@ int main(int argc, char **argv)
 				for (size_t i = 0; i < g.gl_pathc; i++) {
 					int gfd = open(g.gl_pathv[i], O_RDONLY | O_CLOEXEC);
 					if (gfd >= 0) {
-						read_range(gfd, 0, -1, buf, &total, start);
+						read_range(gfd, 0, -1, buf, &total);
 						close(gfd);
 					}
 				}
@@ -160,7 +175,7 @@ int main(int argc, char **argv)
 		}
 		if (fd < 0)
 			continue;
-		read_range(fd, off, len, buf, &total, start);
+		read_range(fd, off, len, buf, &total);
 	}
 	if (fd >= 0)
 		close(fd);
