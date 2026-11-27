@@ -49,6 +49,20 @@ What changed against Arch's PKGBUILD:
   CPU mapping, and `panfrost_bo_free` unmaps it (every way out of the cache goes through it; a
   BO the kernel purged is still caught on fetch and freed). The race: 12.2-13.5 to 10.1-10.7 ms
   a frame (three runs each from one resume state); the frames the same.
+- `0003-panfrost-skip-bo-cache-label-ioctls.patch` and `-mcpu=cortex-a55 -O3 -fomit-frame-pointer`
+  (`26.3.1`, `pkgrel=2`). Putting a BO into the cache and fetching it back each called
+  `panfrost_bo_set_label`, issuing two `DRM_IOCTL_PANFROST_SET_LABEL_BO` ioctls per BO reuse.
+  Cached puts and hits now update the userspace label without the kernel ioctl (freshly allocated
+  BOs still set it), and stage 2 builds for the RG DS+'s Cortex-A55 at `-O3` without generic
+  hardening overhead. Together with `nibcase`'s `uclamp` / FBO cache / `MESA_NO_ERROR=1` changes,
+  the Mesa update trimmed Ridge Racer 2 by ~0.3 ms (10.19 to 9.89 ms) and God of War gameplay by
+  ~0.5 ms (25.87 to 25.37 ms).
+- `0004-util-aarch64-hardware-fp16.patch` and optional PGO (`PGO_DIR`, `26.3.1`, `pkgrel=3`).
+  `_mesa_half_to_float` already had an AArch64 `fcvt` fast path while `_mesa_float_to_half` fell
+  back to `_mesa_float_to_half_slow`; using AArch64 `__fp16` compiles to a single `fcvt h, s`
+  instruction. Building stage 2 with on-device gameplay PGO (`PGO_DIR`) further trimmed God of
+  War (`fs=disabled`) by ~1.25 ms (22.02 to 20.77 ms core) and Ridge Racer 2 by ~0.7 ms (8.41 to
+  7.74 ms core).
 
 Checked on the device: EGL 1.5 on GBM, `Mali-G52 r1 MC1 (Panfrost)`, OpenGL ES 3.1. DSlot's
 two-window GLES test (KMSDRM, `SDL_KMSDRM_ATOMIC=0`) runs at 56 fps, as before. `llvm-libs` and

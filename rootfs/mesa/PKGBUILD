@@ -5,7 +5,7 @@ pkgbase=mesa-nibos
 pkgname=(mesa-nibos vulkan-panfrost-nibos)
 pkgver=26.3.1
 _pkgver=${pkgver/[a-z]/-&}
-pkgrel=1
+pkgrel=3
 epoch=1
 pkgdesc="Mesa OpenGL/GLES/EGL/GBM for nibOS: Panfrost only, no LLVM"
 url="https://www.mesa3d.org/"
@@ -55,10 +55,14 @@ makedepends=(
 options=(!lto)
 source=("https://archive.mesa3d.org/mesa-$_pkgver.tar.xz"
         0001-panfrost-copy-indices-before-scanning-them.patch
-        0002-panfrost-keep-cached-bos-mapped.patch)
+        0002-panfrost-keep-cached-bos-mapped.patch
+        0003-panfrost-skip-bo-cache-label-ioctls.patch
+        0004-util-aarch64-hardware-fp16.patch)
 sha256sums=('4e4e438eac7b840a9383988cbb7c08dad8041da544b9319fc26d319fa7348961'
             '306eae2a8d71e460de142c4f6e07590e2864d0f0eb342c65791f56fef2a15893'
-            '18630e4cfc0ad7d1b9aaf637c4cccd50ef84cf302a3389123a5c2fedc8528bb4')
+            '18630e4cfc0ad7d1b9aaf637c4cccd50ef84cf302a3389123a5c2fedc8528bb4'
+            '694f179cd349db77f24026a1d6f3173b428b0e6e0a4dfa6289ff90027387c69d'
+            'f3f09d972d1e82068337fefcf7a25f0f4abd613d1dade352a27e6faaedff83d8')
 
 prepare() {
   cd mesa-$_pkgver
@@ -67,6 +71,10 @@ prepare() {
   patch -Np1 -i "$srcdir/0001-panfrost-copy-indices-before-scanning-them.patch"
   # Buffers keep their CPU mapping in the BO cache (README.md).
   patch -Np1 -i "$srcdir/0002-panfrost-keep-cached-bos-mapped.patch"
+  # Skip kernel SET_LABEL_BO ioctls on BO cache put/reuse (README.md).
+  patch -Np1 -i "$srcdir/0003-panfrost-skip-bo-cache-label-ioctls.patch"
+  # Use AArch64 hardware fcvt for _mesa_float_to_half (README.md).
+  patch -Np1 -i "$srcdir/0004-util-aarch64-hardware-fp16.patch"
   # Same scheme as Arch ("-arch1.1"), marked as ours.
   echo "$_pkgver-nibos$epoch.$pkgrel" >VERSION
 }
@@ -87,8 +95,16 @@ build() {
   export PATH="$srcdir/clc-tools/usr/bin:$PATH"
 
   # Stage 2: the driver, using the tools from stage 1 (-D mesa-clc=system).
+  # Target the RG DS+'s Cortex-A55 at -O3 without generic hardening overhead (Panfrost is ~40%
+  # of CPU time in heavy 3D emulators). Pass PGO_DIR=/path/to/gcda for profile-guided builds.
+  local opt="-mcpu=cortex-a55 -O3 -fomit-frame-pointer -pipe -fno-plt"
+  if [ -n "${PGO_DIR:-}" ] && [ -d "$PGO_DIR" ]; then
+    opt="$opt -fprofile-use=$PGO_DIR -fprofile-correction -Wno-missing-profile -Wno-error=coverage-mismatch"
+  fi
+  export CFLAGS="$opt"
+  export CXXFLAGS="$opt"
   local meson_options=(
-    --optimization 2
+    --optimization 3
     -D b_ndebug=true
     -D android-libbacktrace=disabled
     -D gallium-drivers=panfrost

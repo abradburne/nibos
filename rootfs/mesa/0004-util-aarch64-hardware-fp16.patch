@@ -1,0 +1,30 @@
+From: nibOS <nibos@local>
+Subject: [PATCH] util/half_float: use AArch64 fcvt for _mesa_float_to_half
+
+_mesa_half_to_float already has an AArch64 hardware fcvt fast path, while
+_mesa_float_to_half fell through to the software bit-manipulation fallback
+(_mesa_float_to_half_slow), which showed up as 0.36% of total CPU time in
+Panfrost uniform/state uploads on Cortex-A55. Use AArch64's IEEE-754 RTNE
+fcvt instruction via __fp16, matching the x86_64 F16C path.
+---
+ src/util/half_float.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/util/half_float.h b/src/util/half_float.h
+index 1111111..2222222 100644
+--- a/src/util/half_float.h
++++ b/src/util/half_float.h
+@@ -70,6 +70,11 @@ _mesa_float_to_half(float val)
+       __asm volatile("vcvtps2ph $0, %1, %0" : "=v"(out) : "v"(in));
+       return out[0];
+    }
++#elif DETECT_ARCH_AARCH64 && DETECT_CC_GCC
++   __fp16 h = (__fp16)val;
++   uint16_t result;
++   memcpy(&result, &h, sizeof(result));
++   return result;
+ #endif
+    return _mesa_float_to_half_slow(val);
+ }
+-- 
+2.47.0

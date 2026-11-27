@@ -1,0 +1,41 @@
+--- a/src/gallium/drivers/panfrost/pan_bo.c
++++ b/src/gallium/drivers/panfrost/pan_bo.c
+@@ -283,7 +283,7 @@
+    panfrost_bo_cache_evict_stale_bos(dev);
+ 
+    /* Update the label to help debug BO cache memory usage issues */
+-   panfrost_bo_set_label(bo, "Unused (BO cache)");
++   panfrost_bo_replace_label(bo, "Unused (BO cache)", false);
+ 
+    /* Must be last */
+    pthread_mutex_unlock(&dev->bo_cache.lock);
+@@ -363,12 +363,18 @@
+     * cache. But if there's no nothing suitable, we should flush the cache
+     * to make space for the new allocation.
+     */
++   bool from_cache = true;
+    bo = panfrost_bo_cache_fetch(dev, size, flags, label, true);
+-   if (!bo)
++   if (!bo) {
++      from_cache = false;
+       bo = panfrost_bo_alloc(dev, size, flags, label);
+-   if (!bo)
++   }
++   if (!bo) {
++      from_cache = true;
+       bo = panfrost_bo_cache_fetch(dev, size, flags, label, false);
++   }
+    if (!bo) {
++      from_cache = false;
+       panfrost_bo_cache_evict_all(dev);
+       bo = panfrost_bo_alloc(dev, size, flags, label);
+    }
+@@ -398,7 +404,7 @@
+                                panfrost_bo_size(bo), NULL);
+    }
+ 
+-   panfrost_bo_set_label(bo, label);
++   panfrost_bo_replace_label(bo, label, !from_cache);
+    bo->seqno++;
+ 
+    return bo;
