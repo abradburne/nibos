@@ -37,7 +37,7 @@ optdepends=('dslot: the GBA DS page that starts its games'
 _mgba=143adf5aa2a60c6036810b0cd72445e13d74b0e6
 source=("gba-ds-$_commit.tar.gz::$url/archive/$_commit.tar.gz"
         "mgba-$_mgba.tar.gz::https://github.com/mgba-emu/mgba/archive/$_mgba.tar.gz")
-sha256sums=('3cbaaf73b3353ad00bb5c2c220b6916d03c0cd14d82abd81df46cc9ec8815a90'
+sha256sums=('3529ae97621eea7f0eea97f74064b1a1671b0857cf5db9d07179d3cdeebcd37a'
             '32d73531d0fe743cfb27c0e11fb4869d495f6fd6a0162353fb73e29c26af64a7')
 
 build() {
