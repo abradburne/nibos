@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.0.0-beta1
+
+The first beta of nibOS 1.0, with DSlot 1.0.0-beta1: a much faster start, games over Wi-Fi and
+over the USB cable, artwork fetched for you, and quicker DS and PSP games.
+
+- **DSlot 1.0.0-beta1.** A Home page with every console's recent games, favourites and
+  top-rated games together; Name, Recent, Favourites and Rating on every console's page;
+  artwork DSlot fetches itself (Game, Console and System → Artwork); grid sizes from Small to
+  Extra large; discs that spin up as a game starts; and "Starting…" or "Resuming…" with the
+  game's name on the top screen as it goes in. DSlot's own changelog has the rest.
+- **Receive games over Wi-Fi.** Send games from a phone or computer with LocalSend and they
+  land in the right console's folder: the device checks what each file is (its header, what
+  is in a zip, its CRC-32) and puts it on the card you chose. Off until you turn it on in
+  DSlot's Network → Receive games, where a PIN can be set; `nib drop` does the same from a
+  shell (`nibos-drop`).
+- **Copy games over the USB cable.** Hold Menu and plug a cable from a computer into the port
+  marked USB (the one you charge from): DSlot closes, the screens say "Connected to a
+  computer", and the cards appear on the computer as drives. Eject them or unplug and the
+  device checks the cards and DSlot comes back with the new games. Plugging in without Menu
+  just charges, as before. Checked with a Mac; a Windows PC is still to be checked.
+- **A faster start.** The CPU runs at full speed from the first stage of the bootloader, the
+  kernel loads less before the shelf needs it, both screens' boot picture goes up in one
+  step, the files DSlot needs are read ahead while the system starts, and the cards are
+  mounted without waiting for the rest of the system. Wi-Fi, Bluetooth and the other
+  background services start once the shelf is up.
+- **A faster power-off.** The log is saved without a full sync of every card, settings are
+  only copied to the card when they changed, and a service that won't stop is given five
+  seconds, not ninety.
+- **Settings are kept on an exFAT card again** when a port left a symbolic link in its
+  settings folder (OpenTyrian did): links are skipped, not fatal to the copy.
+- **DS games in high-resolution 3D are faster** (DSperate): the 3D picture is drawn in one
+  pass with the GPU's own depth test and smaller vertex data, and put on the screens in fewer
+  steps. The 3D resolution setting offers 1x and 2x on the RG DS+.
+- **PSP and the other GPU-drawn systems are faster** (nibcase, PPSSPP): the cores are built
+  for the Cortex-A55, a frame is copied to the screens from a kept buffer, and the CPU is
+  held at speed while a game draws. PSP sound no longer crackles when frames are skipped.
+- **Mesa 26.3.1** (from 26.2.4), with nibOS's Panfrost patches and two more for speed, built
+  for the Cortex-A55.
+- **"Saving your place…"** on the top screen, over the game's last picture and its name, as
+  a game saves on the way out: in DS, GBA, GBA DS, Game Boy, Game & Watch and nibcase's
+  systems alike.
+- **Sleep and power-off are more reliable.** The PMIC's sleep line is no longer switched
+  between two jobs, the power-off waits for the PMIC to take it, and a sleep that is under
+  way finishes before a power-off queued behind it. The charger going in or out is read
+  from the PMIC each time the battery is, not only when it says so.
+
 ## 0.1.0-beta4
 
 GBA DS, screen looks for the DS, GBA and Game Boy, a low-battery warning, and powering off
