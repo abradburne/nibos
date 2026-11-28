@@ -177,6 +177,20 @@ tried; if it doesn't come up, the device goes back to the old one by itself, and
 rollback` goes back by hand. Games, saves and settings stay. How it works:
 [design/updates.md](design/updates.md).
 
+## Copying games from a computer
+
+Hold **Menu** and plug a USB-C cable from the computer into the port marked **USB** (the one
+you charge from), and keep holding for a second. DSlot closes (a running game is saved first)
+and the screens say **Connected to a computer**. The cards then appear on the computer as
+drives: `NIBOS-DATA` (the card the device starts from) and the games card in TF2 (`DS`).
+Copy games into their `Roms/<SYSTEM>` folders.
+
+To return, **eject** the drives on the computer, or unplug the cable. Either way the device
+checks the cards and DSlot comes back with the new games on the shelf. Ejecting first is the
+safe way: unplugging in the middle of a copy loses the file being copied (the check repairs
+the card around it) but nothing else. The device charges while connected. Plugging in without
+holding Menu just charges, as before. The port marked **OTG** is not for this.
+
 ## What to do if…
 
 - **Something went wrong and you want to report it.** `nib bug-report send` saves a scrubbed

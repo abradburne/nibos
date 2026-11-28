@@ -23,7 +23,8 @@
 //! - [`update`]: system updates: a release's manifest and signature, and writing it to the
 //!   slot that isn't running (`nibos-update`);
 //! - [`drop`]: headless LocalSend v2.1 ROM receiver, two-stage ROM classifier and status
-//!   reporting (`nibos-drop`).
+//!   reporting (`nibos-drop`);
+//! - [`usb_storage`]: the data cards as drives on a computer (`nibos-usb-storage`).
 //!
 //! The binaries (`src/bin/`) open the devices, run the loops and call these.
 
@@ -42,6 +43,7 @@ pub mod power;
 pub mod provision;
 pub mod steps;
 pub mod update;
+pub mod usb_storage;
 
 /// The device `nibos-input` passes the volume keys on through (the raw
 /// device is grabbed, so the Menu + volume shortcut doesn't change the volume

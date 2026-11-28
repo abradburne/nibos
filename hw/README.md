@@ -142,6 +142,39 @@ near the end, while the device runs from it. The lines are `NIBOS_BATTERY_*` in 
 stock firmware powers off at 3.40 V (its `power_off_thresd`), the OCV table's 0%; the 3.45 V
 line leaves 50 mV for the sag. It still has to be checked against a drain to empty.
 
+**USB storage.** Holding **Menu** while the USB cable goes into the port marked **USB** (the
+charging port) puts the data cards on the computer as drives: the fstab entries under `/mnt`
+that are exFAT or FAT (an image's NIBOS-DATA partition and the games card in TF2). Plugging in
+without Menu, or into a charger, changes nothing.
+
+- **Plug.** udev hands every event of the board's charger (`NIBOS_CHARGER`) to
+  `nibos-usb-storage --event` (`71-nibos-usb-storage.rules`), which keeps its last state in
+  `/run/nibos/usb-storage-charger` and starts `nibos-usb-storage.service` when it comes online.
+  The service reads Menu's state (EVIOCGKEY on `NIBOS_BUTTONS_DEVICE`, which `nibos-input`'s
+  grab doesn't hide) for 1.5 s, and leaves if it isn't held.
+- **A computer, not a charger.** It makes a configfs gadget (`usb_gadget/nibos`: one mass
+  storage function, a LUN per card, removable, not a CD-ROM, read-write, FUA honoured) with no
+  card in its LUNs yet and binds it to the controller (`fcc00000.usb`). Unless the computer
+  configures it within 6 s, the gadget goes and nothing else has happened. A DWC3 bound once
+  with no cable in fails every bind after (`failed to enable ep0out`) until its driver probes it
+  again, which the service does if a bind fails.
+- **Handing the cards over.** Sleep is masked (`--runtime`: the lid and the power key do
+  nothing; a reboot clears it), DSlot is stopped (a game is saved and put away first) and so is
+  the console its exit starts, and both screens say "Connected to a computer" / "Unplug to
+  return". Each card's mount and automount are stopped, mount before automount, then masked,
+  because udev's games-card rule would mount the card again the moment the gadget closes it.
+  Units that need a card mounted (the settings and logs saved at power-off) stop with it and
+  write their files first. The cards then go into the LUNs.
+- **Back.** Unplugging, the computer ejecting every drive, or a shutdown gives the cards back:
+  the LUNs are emptied, the gadget goes, and each card is checked before it is mounted again:
+  `fsck.exfat -p` when its VolumeDirty flag is set (the computer had it mounted and didn't
+  finish: unplugged without ejecting, or mid-copy), `fsck.fat -a` always on FAT. Then the
+  mounts, the units that needed them, sleep and DSlot (or the console) come back.
+
+Unplugging mid-copy loses the file being written (the check truncates it to what arrived) and
+nothing else. Ejecting on the computer first is the safe way. On the RG DS+, a write from a
+Mac ran at ~8.6 MB/s, about what the card takes. The device charges while connected.
+
 **Brightness.** Each screen has its own backlight, and nibOS offers them to programs as two
 named, unprivileged knobs (the first case of nibOS's [device interface](../docs/engineering/device-interface.md)):
 

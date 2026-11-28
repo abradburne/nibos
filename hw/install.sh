@@ -8,7 +8,8 @@
 #   install.sh DESTDIR BINDIR SOCFILES BOARDFILES
 #
 # BINDIR holds the built nibos-input, nibos-audio, nibos-backlight, nibos-provision,
-# nibos-charge-boot, nibos-bootctl, nibos-keys, nibos-update and nibos-battery
+# nibos-charge-boot, nibos-bootctl, nibos-keys, nibos-update, nibos-battery, nibos-mount-cards,
+# nibos-drop and nibos-usb-storage
 # (daemons/, cargo build --release).
 set -eu
 [ $# -eq 4 ] || { echo "usage: install.sh DESTDIR BINDIR SOCFILES BOARDFILES" >&2; exit 2; }
@@ -46,3 +47,4 @@ install -Dm755 "$bin/nibos-keys" "$dest/usr/bin/nibos-keys"
 install -Dm755 "$bin/nibos-battery" "$dest/usr/bin/nibos-battery"
 install -Dm755 "$bin/nibos-mount-cards" "$dest/usr/bin/nibos-mount-cards"
 install -Dm755 "$bin/nibos-drop" "$dest/usr/bin/nibos-drop"
+install -Dm755 "$bin/nibos-usb-storage" "$dest/usr/bin/nibos-usb-storage"

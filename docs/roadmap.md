@@ -79,12 +79,16 @@ nibOS boots DSlot today. It should boot whichever frontend is installed.
 ## 5. USB-C device mode
 
 The device tree puts the RK3568's OTG controller (DWC3) in peripheral mode, and the kernel
-builds the configfs gadget functions for NCM, RNDIS and mass storage; still to check is that
-this is the USB-C port, and that a computer enumerates it.
+builds the configfs gadget functions for NCM, RNDIS and mass storage. The controller is the
+charging port's, the USB-C port marked **USB**: a Mac enumerates it at high speed (checked
+2026-11-11). The port marked **OTG** shows no VBUS and no link to it.
 
-- **USB mass storage of the data card**: hold a button while plugging the cable in and the data
-  card appears on the computer as a drive. Done when: games copied from a computer are on the
-  shelf after unplugging, and unplugging mid-copy leaves the card intact.
+- [x] **USB mass storage of the data cards** (2026-11-11, macOS): hold Menu while plugging
+  the cable in and the cards appear on the computer as drives, unmounted on the device while
+  they do (`nibos-usb-storage`, [hw/README.md](../hw/README.md), "USB storage"). Checked on a
+  Mac: a 200 MB file copied over came back intact, ejecting or unplugging returns to DSlot,
+  unplugging mid-copy is repaired by the check that follows (the half-written file truncated,
+  the card clean), and the device charges while connected. Still to check: a Windows PC.
 - **USB networking** (CDC-NCM, with RNDIS for older Windows): SSH over the cable without Wi-Fi.
 
 ## 6. Power

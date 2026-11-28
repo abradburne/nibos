@@ -1,0 +1,19 @@
+# nibos-hw: the data cards as drives on a computer, while Menu is held as the USB cable goes in
+# (/usr/bin/nibos-usb-storage, hw/daemons; hw/README.md, "USB storage"). Started by udev on a
+# plug (71-nibos-usb-storage.rules), never enabled. With Menu not held, or a charger at the
+# other end, it leaves at once having changed nothing.
+[Unit]
+Description=USB storage of the data cards
+After=nibos-input.service
+# Not stopped by isolating rescue.target and the like mid-copy; shutdown stops it (SIGTERM:
+# the cards come back and are checked first).
+IgnoreOnIsolate=yes
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/nibos-usb-storage
+# The boot UI's put-away (10 s), the card checks and remounting fit in this.
+TimeoutStopSec=90

@@ -1,0 +1,4 @@
+# nibos-hw: USB storage (hw/README.md, "USB storage"). Every event of the board's charger
+# (NIBOS_CHARGER) goes to nibos-usb-storage --event, which notes whether it is online and starts
+# nibos-usb-storage.service when it has just come online: a plug. "add" notes the state at boot.
+ACTION=="add|change", SUBSYSTEM=="power_supply", ATTR{type}!="Battery", RUN+="/usr/bin/nibos-usb-storage --event %k"
