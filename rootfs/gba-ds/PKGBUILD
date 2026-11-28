@@ -19,8 +19,8 @@
 NIBOS_ROOT=$(cd "$startdir/../.." && pwd)
 
 pkgname=gba-ds
-_commit=fe366b93f8026fa52eeca8f9ee54d0c236250db8
-pkgver=1.5.r1.gfe366b9
+_commit=266b349de2d0c5b4c4129fbaef4529915fc704fd
+pkgver=1.5.r2.g266b349
 pkgrel=1
 pkgdesc="GBA DS: Game Boy Advance games with their map or status screen on the second screen"
 url="https://github.com/abradburne/gba-ds"
