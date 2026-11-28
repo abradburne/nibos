@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alan Bradburne <abradburne@gmail.com>
+Date: Fri, 27 Nov 2026 22:06:45 +0900
+Subject: [PATCH 7/7] power: supply: rk817: refresh plug state in rk817_read_props
+
+rk817_charger only updates charger->plugged_in at probe and from its
+plug-in and plug-out threaded IRQs. If a plug event is missed (for
+example across suspend), online and the charger LED trigger stay stale
+indefinitely, even though rk817_resume() immediately runs
+rk817_read_props() and the monitor polls every 8 seconds.
+
+Check RK817_SYS_STS (RK817_PLUG_IN_STS) in rk817_read_props() and, when
+it disagrees with charger->plugged_in, update it, reapply the charge
+voltage (and USB input limits on unplug, as rk817_plug_out_isr() does),
+and notify both power supplies.
+
+Upstream status: candidate.
+---
+ drivers/power/supply/rk817_charger.c | 29 ++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/drivers/power/supply/rk817_charger.c b/drivers/power/supply/rk817_charger.c
+index 81c0123..e028b00 100644
+--- a/drivers/power/supply/rk817_charger.c
++++ b/drivers/power/supply/rk817_charger.c
+@@ -367,6 +367,35 @@ static void rk817_read_props(struct rk817_charger *charger)
+ {
+ 	int tmp, reg;
+ 	u8 bulk_reg[4];
++	bool plugged_in;
++
++	/*
++	 * Refresh the plug state from hardware in case a plug-in or plug-out
++	 * interrupt was missed (for instance across suspend).
++	 */
++	if (!regmap_read(charger->rk808->regmap, RK817_SYS_STS, &reg)) {
++		plugged_in = !!(reg & RK817_PLUG_IN_STS);
++		if (plugged_in != !!charger->plugged_in) {
++			charger->plugged_in = plugged_in;
++			rk817_set_chg_volt(charger);
++			if (!plugged_in) {
++				regmap_write_bits(charger->rk808->regmap,
++						  RK817_PMIC_CHRG_IN,
++						  RK817_USB_VLIM_SEL, (0x05 << 4));
++				regmap_write_bits(charger->rk808->regmap,
++						  RK817_PMIC_CHRG_IN,
++						  RK817_USB_VLIM_EN, (0x01 << 7));
++				regmap_write_bits(charger->rk808->regmap,
++						  RK817_PMIC_CHRG_IN,
++						  RK817_USB_ILIM_SEL, 0x03);
++				regmap_write_bits(charger->rk808->regmap,
++						  RK817_PMIC_CHRG_IN,
++						  RK817_USB_ILIM_EN, (0x01 << 3));
++			}
++			power_supply_changed(charger->chg_ps);
++			power_supply_changed(charger->bat_ps);
++		}
++	}
+ 
+ 	/*
+ 	 * Recalibrate voltage and current readings if we need to BSP does both

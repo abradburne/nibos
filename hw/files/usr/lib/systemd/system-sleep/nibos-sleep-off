@@ -58,8 +58,9 @@ post)
             echo "nibos-sleep-off: dry run: asleep the set time on battery, would power off"
         else
             echo "nibos-sleep-off: asleep the set time on battery: powering off"
-            # --no-block: this hook runs inside systemd-suspend.service, which the power-off
-            # job waits for; the job starts once the hook returns and the suspend finishes.
+            # --no-block: this hook runs inside systemd-suspend.service, which orders
+            # itself Before=shutdown.target (systemd-suspend.service.d/50-nibos.conf)
+            # so power-off starts only after all post hooks and user.slice thaw finish.
             systemctl start --no-block --job-mode=replace-irreversibly poweroff.target ||
                 echo "nibos-sleep-off: could not queue the power-off"
         fi

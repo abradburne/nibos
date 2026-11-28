@@ -708,22 +708,15 @@
 		interrupt-parent = <&gpio0>;
 		interrupts = <RK_PA3 IRQ_TYPE_LEVEL_LOW>;
 		/*
-		 * pmic_sleep: GPIO0_A2 as the PMU's sleep output, which the
-		 * RK817's SLEEP pin (and the SYR827's VSEL) follow. Without it
-		 * the PMIC never enters its sleep state in deep sleep and the
-		 * regulator-state-mem tables below do nothing. Only in the
-		 * "sleep" state, which rk8xx_suspend() selects (SoC patch
-		 * 0005): routed there at power-off too, the PMIC no longer
-		 * started from the power key, only after a long press.
-		 * "default" names the pin too (pmic_sleep_gpio, a GPIO driven
-		 * low, as the stock firmware's pmic-power-off state has it):
-		 * pinctrl leaves a pin a new state doesn't name as it was, so
-		 * without it the first suspend left the pin on pmic_sleep for
-		 * every later power-off.
+		 * Keep GPIO0_A2 driven low as a plain GPIO (pmic_sleep_gpio) and
+		 * never mux it to the PMU's pmic_sleep output. Under TF-A's
+		 * default sleep configuration (PLLs stay up), asserting the
+		 * RK817's SLEEP pin cuts vdda_0v9, vccio_sd and vdd_cpu for only
+		 * 4-8 mA saved and can hang deep sleep or leave the PMIC unable
+		 * to start from a short power-key press (docs/design/deep-sleep.md).
 		 */
 		pinctrl-0 = <&i2s1m0_mclk &pmic_int_l &pmic_sleep_gpio>;
-		pinctrl-1 = <&i2s1m0_mclk &pmic_int_l &pmic_sleep>;
-		pinctrl-names = "default", "sleep";
+		pinctrl-names = "default";
 		#sound-dai-cells = <0>;
 		system-power-controller;
 		wakeup-source;
@@ -1155,11 +1148,6 @@
 		pmic_int_l: pmic-int-l {
 			rockchip,pins =
 				<0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>;
-		};
-
-		pmic_sleep: pmic-sleep {
-			rockchip,pins =
-				<0 RK_PA2 1 &pcfg_pull_none>;
 		};
 
 		pmic_sleep_gpio: pmic-sleep-gpio {

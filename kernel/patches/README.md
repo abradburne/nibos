@@ -13,6 +13,7 @@ v7.3.4), before the SoC's (`socs/<soc>/kernel/patches/`) and the board's
 | 0004 | rk817 charger: a writable charge voltage (battery protect) | Candidate |
 | 0005 | aw88166: start the amp once the stream runs (speakers after resume) | Candidate |
 | 0006 | dw_wdt: keep the pre-timeout mode a bootloader left running (a watchdog timeout panics) | Candidate |
+| 0007 | rk817 charger: refresh plug state from `RK817_SYS_STS` in `rk817_read_props()` | Candidate |
 
 Why each one exists, as measured, next to the SoC's and the board's, and how to change one:
 [docs/engineering/patches.md](../../docs/engineering/patches.md).

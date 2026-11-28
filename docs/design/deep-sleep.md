@@ -135,10 +135,11 @@ away either way.
 
 - **The "off" drain** needs a meter or a long off interval with the voltage read before and after
   (the gauge re-estimates at boot); and whether the RK817's RTC alarm is a power-on source.
-- **Why deep sleep draws ~45 mA.** See "Where the drain goes" below: the PMIC now really sleeps
-  (4-8 mA), the radios aren't it, and what is left is the SoC under TF-A's default sleep (PLLs and
-  the 24 MHz oscillator up). The stock firmware's deeper TF-A configuration needs a resume path
-  through the loader that mainline SPL doesn't have.
+- **Why deep sleep draws ~49 mA.** See "Where the drain goes" below: `pmic_sleep` (4-8 mA) was
+  dropped because cutting rails under TF-A's default sleep hung deep sleep; the radios aren't it,
+  and what is left is the SoC under TF-A's default sleep (PLLs and the 24 MHz oscillator up). The
+  stock firmware's deeper TF-A configuration needs a resume path through the loader that mainline
+  SPL doesn't have.
 - **DSlot's System page**: show and set `nib sleep off-after` (needs `nibkit`), a follow-up in
   dslot.
 
@@ -154,7 +155,7 @@ minutes asleep).
 |---|---|---|---|
 | Nothing (the alpha6 kernel, the night before) | 52.1 mA | 48.5 mA | |
 | The stock firmware's TF-A sleep configuration (`rockchip,sleep-mode-config` 0x5ec, `wakeup-config` 0x10, sent over the vendor SIP call from a test module) | hung: no wake by RTC, power key or lid; a 15 s power-key hold | | no |
-| GPIO0_A2 muxed to the PMU's `pmic_sleep` output (the RK817's SLEEP pin and the SYR827's VSEL) | 48.7 mA | 40.6 mA | **yes** |
+| GPIO0_A2 muxed to the PMU's `pmic_sleep` output (the RK817's SLEEP pin and the SYR827's VSEL) | 48.7 mA | 40.6 mA | **dropped** (see below) |
 | ... and Wi-Fi and Bluetooth switched off (`nib wifi off`, `nib bluetooth off`) before sleeping | 46.1 mA | 40.4 mA | no change |
 | TF-A's sleep mode set to ARMOFF and HW_PLLS_OFF only (0x42, the stock's PLL bit without its logic-off and oscillator bits) | never woke, nor by the power key or lid: a 15 s power-key hold | | no |
 
@@ -194,6 +195,28 @@ was luck. The default state now names the pin (`pmic_sleep_gpio`: a GPIO driven 
 tree's `pmic-power-off` setting). Tested 2026-11-11 with kernel #9 and that DTB in slot B: mux 0
 after a suspend and resume; `nib sleep off-after 1`, the device powered off by itself and a short
 press started it (power-on source 0x80).
+
+**...and dropped altogether (post-beta4).** Even with `pmic_sleep_gpio` in `default`, beta4 still
+occasionally got stuck on auto power-off (and when plugged in, the amber charging LED stayed lit
+even after unplugging the USB-C cable while the device ignored short presses and needed a long
+power-button hold). Because `amber_led` (`GPIO0_C5`, `retain-state-suspended`, not
+`retain-state-shutdown`) is turned off unconditionally by `gpio_led_shutdown()` during a kernel
+power-off, a stuck-on amber LED with `green_led` off proves the SoC hung inside deep sleep (or
+never completed resume/power-off) rather than powering off cleanly. Under TF-A's default sleep
+configuration (PLLs still up), asserting `pmic_sleep` cuts `vdda_0v9`, `vccio_sd` and `vdd_cpu`
+for only 4-8 mA (~0.1-0.2% of the 4247 mAh battery per 60-minute sleep). Four fixes were applied
+together:
+- Keep `GPIO0_A2` permanently on `pmic_sleep_gpio` (driven low) and drop `pmic_sleep` from the DTS,
+  matching mainline `rk3568-anbernic-rg-ds.dts`.
+- Order `systemd-suspend.service` `Before=shutdown.target` (`systemd-suspend.service.d/50-nibos.conf`)
+  so `nibos-sleep-off`'s irreversible `poweroff.target` job waits for all `system-sleep` post hooks
+  (including `nibos-unbind` USB re-bind) and `user.slice` thaw before tearing down the system;
+  use the same irreversible `poweroff.target` queueing in `nibos-charge-boot` on unplug.
+- Build `CONFIG_RTC_DRV_RK808=y` and `CONFIG_INPUT_RK805_PWRKEY=y` into the kernel so the RK817's
+  RTC and power-key interrupts are unmasked from boot, replace `rk3568/0005` so `rk8xx_shutdown()`
+  skips `SLPPIN_DN_FUN` when `DEV_OFF` handles power-off and `rk808_power_off()` waits 100 ms for
+  `DEV_OFF` to cut power, and refresh `charger->plugged_in` from `RK817_SYS_STS` in
+  `rk817_read_props()` (`generic/0007`) so missed plug IRQs self-correct on resume.
 
 **The stock TF-A configuration hangs.** The vendor kernel hands TF-A a sleep mode over
 `SIP_SUSPEND_MODE` (0x82000003); the stock DTB's 0x5ec is CENTER_OFF, ARMOFF_LOGOFF, PMIC_LP,

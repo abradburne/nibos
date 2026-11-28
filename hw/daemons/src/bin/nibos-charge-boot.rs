@@ -289,7 +289,16 @@ fn main() {
             Next::Boot => break,
             Next::PowerOff => {
                 eprintln!("nibos-charge-boot: unplugged: powering off");
-                let _ = Command::new("systemctl").arg("poweroff").status();
+                // Queue poweroff.target irreversibly, as nibos-sleep-off does: with the lid
+                // closed logind re-suspends within ~2 s of waking and can beat `systemctl poweroff`.
+                let _ = Command::new("systemctl")
+                    .args([
+                        "start",
+                        "--no-block",
+                        "--job-mode=replace-irreversibly",
+                        "poweroff.target",
+                    ])
+                    .status();
                 return;
             }
             Next::Sleep => eprintln!("nibos-charge-boot: woke, still charging: sleeping again"),
