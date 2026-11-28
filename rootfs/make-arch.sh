@@ -51,8 +51,9 @@ label=$BOARD_ROOT_PARTLABEL
 for_image=${IMAGE:-0}
 image_pkgs=()
 if [ "$for_image" = 1 ]; then
-    # The first boot formats the data partition exFAT.
-    image_pkgs=(exfatprogs)
+    # The first boot formats the data partition exFAT. dosfstools: fsck.fat, which
+    # nibos-usb-storage runs on a FAT games card a computer has had (hw/README.md).
+    image_pkgs=(exfatprogs dosfstools)
     # DSlot is an SDL2 program, on SDL3.
     [ "${DSLOT:-0}" = 1 ] && image_pkgs+=(sdl2-compat)
     image=$out/image-root.img
