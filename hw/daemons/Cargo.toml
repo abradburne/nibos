@@ -2,7 +2,7 @@
 name = "nibos-hw"
 version = "0.1.0"
 edition = "2021"
-description = "nibOS hardware daemons: nibos-input (one gamepad), nibos-audio (headphone/speaker switching), nibos-keys (the console's on-screen keyboard), nibos-update (system updates)"
+description = "nibOS hardware daemons: nibos-input (one gamepad), nibos-audio (headphone/speaker switching), nibos-keys (the console's on-screen keyboard), nibos-update (system updates), nibos-drop (headless LocalSend ROM receiver)"
 license = "GPL-3.0-or-later"
 
 [dependencies]
@@ -20,6 +20,15 @@ serde_json = "1"
 minisign-verify = "0.3"
 sha2 = "0.11"
 ruzstd = "0.9"
+# nibos-drop: LocalSend v2.1 HTTPS server (pure Rust, GPL-3.0 compatible) and ROM archive/CHD
+# header peeking (zip, cso, chd).
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
+rustls-graviola = "0.3"
+rcgen = { version = "0.13", default-features = false }
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+miniz_oxide = "0.8"
+lzma-rs = "0.3"
 
 [profile.release]
 opt-level = "s"

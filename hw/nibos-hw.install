@@ -8,7 +8,7 @@ post_install() {
     systemctl enable $units >/dev/null 2>&1 || true
     systemctl --global enable nibos-audio.service >/dev/null 2>&1 || true
     udevadm control --reload >/dev/null 2>&1 || true
-    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf nibos-osd.conf >/dev/null 2>&1 || true
+    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf nibos-osd.conf nibos-drop.conf >/dev/null 2>&1 || true
     # Start from the levels the screens have now (systemd's restore set them).
     nibos-backlight save >/dev/null 2>&1 || true
     # "add", as at boot: the LED, wake-up and backlight rules match only that.
@@ -45,7 +45,7 @@ post_upgrade() {
     systemctl enable nibos-backlight.service nibos-charge-boot.service nibos-boot-good.service nibos-radios-restore.service nibos-update-boot.service nibos-battery.service nibos-mount-cards.service >/dev/null 2>&1 || true
     systemctl reenable nibos-input.service >/dev/null 2>&1 || true
     systemctl start nibos-backlight.service >/dev/null 2>&1 || true
-    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf nibos-osd.conf >/dev/null 2>&1 || true
+    systemd-tmpfiles --create nibos-backlight.conf nibos-battery.conf nibos-osd.conf nibos-drop.conf >/dev/null 2>&1 || true
     [ -n "$(ls /var/lib/nibos/backlight 2>/dev/null)" ] || nibos-backlight save >/dev/null 2>&1 || true
     udevadm control --reload >/dev/null 2>&1 || true
     udevadm trigger --action=add --subsystem-match=backlight --subsystem-match=power_supply >/dev/null 2>&1 || true
@@ -54,9 +54,12 @@ post_upgrade() {
     systemctl try-restart nibos-input.service >/dev/null 2>&1 || true
     # The low battery watch: (re)started with the new binary.
     systemctl restart nibos-battery.service >/dev/null 2>&1 || true
+    # Restart LocalSend ROM receiver only if the user currently has it running.
+    systemctl try-restart nibos-drop.service >/dev/null 2>&1 || true
 }
 
 pre_remove() {
     systemctl disable --now $units >/dev/null 2>&1 || true
+    systemctl stop nibos-drop.service >/dev/null 2>&1 || true
     systemctl --global disable nibos-audio.service >/dev/null 2>&1 || true
 }

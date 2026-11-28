@@ -1,0 +1,24 @@
+# nibos-hw: headless LocalSend v2.1 ROM receiver (docs/design/rom-drop.md).
+# Off by default: started and stopped by `nib drop on|off` or DSlot's Network menu
+# (polkit lets the wheel group: 50-nibos-drop.rules).
+[Unit]
+Description=Receive ROMs over LocalSend
+After=network-online.target
+
+[Service]
+Type=simple
+# Runs as the unprivileged owner of /mnt/roms and /mnt/ds (UID 1000), never root.
+User=1000
+Group=1000
+SupplementaryGroups=wheel
+ExecStart=/usr/bin/nibos-drop
+# Stay out of the way of an active game while writing received ROMs.
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=1
+# Sandboxing for a LAN-facing receiver parsing untrusted archives.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=-/mnt/roms -/mnt/ds /run/nibos/drop /var/lib/nibos/drop

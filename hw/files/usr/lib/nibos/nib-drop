@@ -1,0 +1,61 @@
+#!/bin/sh
+# nib drop: receive ROMs over LocalSend (docs/design/rom-drop.md).
+#
+#   nib drop                        state, alias, target card and recent transfers
+#   nib drop on                     start receiving ROMs over LocalSend (turns Wi-Fi on if off)
+#   nib drop off                    stop receiving ROMs
+#   nib drop pin CODE|off           require a PIN (or clear it)
+#   nib drop target auto|tf1|tf2    choose destination card (auto: TF2 else TF1)
+#   nib drop alias NAME|default     device name shown in LocalSend
+#   nib drop artwork on|off         auto-fetch box and cart art in DSlot for received ROMs
+#
+# Runs nibos-drop.service (unprivileged, disabled at boot). The wheel group may start and stop it
+# without a password (50-nibos-drop.rules).
+set -eu
+reload_if_running() {
+    if systemctl -q is-active nibos-drop.service 2>/dev/null; then
+        systemctl restart nibos-drop.service
+    fi
+}
+case "${1:-status}" in
+status | show)
+    nibos-drop show ;;
+on)
+    if [ "$(/usr/lib/nibos/nib-wifi status 2>/dev/null | head -1)" != on ]; then
+        /usr/lib/nibos/nib-wifi on
+    fi
+    systemctl start nibos-drop.service
+    sleep 0.2
+    nibos-drop show ;;
+off)
+    systemctl stop nibos-drop.service
+    nibos-drop show ;;
+pin)
+    [ -n "${2:-}" ] || { echo "usage: nib drop pin CODE|off" >&2; exit 2; }
+    nibos-drop config --pin "$2"
+    reload_if_running
+    nibos-drop show ;;
+target)
+    case "${2:-}" in
+    auto | tf1 | tf2)
+        nibos-drop config --target "$2"
+        reload_if_running
+        nibos-drop show ;;
+    *) echo "usage: nib drop target auto|tf1|tf2" >&2; exit 2 ;;
+    esac ;;
+alias)
+    [ -n "${2:-}" ] || { echo "usage: nib drop alias NAME|default" >&2; exit 2; }
+    nibos-drop config --alias "$2"
+    reload_if_running
+    nibos-drop show ;;
+artwork)
+    case "${2:-}" in
+    on | off)
+        nibos-drop config --artwork "$2"
+        nibos-drop show ;;
+    *) echo "usage: nib drop artwork on|off" >&2; exit 2 ;;
+    esac ;;
+*)
+    sed -n '4,10s/^# \{0,1\}//p' "$0" >&2
+    exit 2 ;;
+esac

@@ -21,7 +21,9 @@
 //! - [`steps`]: the volume keys' steps, for brightness and volume alike;
 //! - [`osd`]: the level the keys just set, announced for the indicator apps draw;
 //! - [`update`]: system updates: a release's manifest and signature, and writing it to the
-//!   slot that isn't running (`nibos-update`).
+//!   slot that isn't running (`nibos-update`);
+//! - [`drop`]: headless LocalSend v2.1 ROM receiver, two-stage ROM classifier and status
+//!   reporting (`nibos-drop`).
 //!
 //! The binaries (`src/bin/`) open the devices, run the loops and call these.
 
@@ -32,6 +34,7 @@ pub mod battery;
 pub mod board;
 pub mod charge;
 pub mod controls;
+pub mod drop;
 pub mod gamepad;
 pub mod keys;
 pub mod osd;

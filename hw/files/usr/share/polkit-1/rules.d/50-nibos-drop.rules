@@ -1,0 +1,8 @@
+// nibos-hw: the wheel group may start, stop and restart the LocalSend ROM receiver
+// (nibos-drop.service: `nib drop`, DSlot's Network -> Receive games page) without a password.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" && subject.isInGroup("wheel")) {
+        var unit = action.lookup("unit") || "";
+        if (unit == "nibos-drop.service") return polkit.Result.YES;
+    }
+});
