@@ -36,6 +36,9 @@ over the USB cable, artwork fetched for you, and quicker DS and PSP games.
 - **PSP and the other GPU-drawn systems are faster** (nibcase, PPSSPP): the cores are built
   for the Cortex-A55, a frame is copied to the screens from a kept buffer, and the CPU is
   held at speed while a game draws. PSP sound no longer crackles when frames are skipped.
+- **Linux 7.3.6** (from 7.3.4), with the same fifteen patches, unchanged. It brings fixes for
+  exFAT (the cards' file system), for the GPU driver's resets and for the Wi-Fi driver, and
+  the PMIC's power-off now runs at the kernel's last step.
 - **Mesa 26.3.1** (from 26.2.4), with nibOS's Panfrost patches and two more for speed, built
   for the Cortex-A55.
 - **"Saving your place…"** on the top screen, over the game's last picture and its name, as

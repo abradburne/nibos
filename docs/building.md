@@ -55,8 +55,8 @@ orb -m rgbuild sudo pacman -Syu --needed base-devel git bc pahole cpio flex biso
 orb -m rgbuild bash -c '. tools/lib.sh && git clone https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git "$KSRC" && git -C "$KSRC" checkout "$KERNEL_COMMIT"'
 ```
 
-`KERNEL_COMMIT` is a stable release (v7.3.4), so the tree is linux-stable, not Linus's. For a
-tree you already have, `git fetch --no-tags <stable> tag v7.3.4` brings it in;
+`KERNEL_COMMIT` is a stable release (v7.3.6), so the tree is linux-stable, not Linus's. For a
+tree you already have, `git fetch --no-tags <stable> tag v7.3.6` brings it in;
 `https://github.com/gregkh/linux.git` is the same repository and was far faster from the build
 machine than kernel.org, whose fetches kept dropping mid-pack (2026-11-13).
 
